@@ -1,0 +1,74 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: altaboard
+      POSTGRES_PASSWORD: altaboard
+      POSTGRES_DB: altaboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U altaboard -d altaboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One image, two commands. Migrations + seed run once before web starts.
+  migrate:
+    build: .
+    command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    environment:
+      DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
+      BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
+      BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build: .
+    command: npm run start
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
+      BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
+      BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
+      DEFAULT_REGION: ${DEFAULT_REGION:-eu}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build: .
+    command: npm run worker
+    environment:
+      DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
+      BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
+      BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
+      DEFAULT_REGION: ${DEFAULT_REGION:-eu}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Optional: `docker compose --profile redis up` — Redis-backed cache upgrade path.
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    ports:
+      - "6379:6379"
+
+volumes:
+  db-data:

@@ -1,0 +1,115 @@
+// Altaboard data model.
+//
+// Known limitations (by design, see README):
+// - Rename / realm transfer creates a new character row; history is not migrated.
+// - Equipment is stored in snapshots from day one but not displayed on the MVP board.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GameVersion {
+  code             String   @id // 'retail' | 'classic1x'
+  label            String
+  namespacePrefix  String // 'profile' etc. — adapters append -{region}
+  active           Boolean  @default(true)
+}
+
+model ResetSchedule {
+  region       String @id // 'us' | 'eu' | 'kr' | 'tw'
+  resetDow     Int // 0=Sunday .. 6=Saturday (UTC day of weekly reset)
+  resetHourUtc Int // hour of day (UTC) at which the reset lands
+}
+
+model Character {
+  id             String    @id @default(cuid())
+  gameVersion    String
+  region         String
+  realmSlug      String
+  nameLower      String
+  name           String
+  characterClass String?
+  spec           String?
+  level          Int?
+  guildName      String?
+  priority       Int       @default(100)
+  groupName      String?
+  archived       Boolean   @default(false)
+  lastFetchedAt  DateTime?
+  lastFetchError String?
+
+  snapshots    CharacterSnapshot[]
+  completions  TaskCompletion[]
+
+  @@unique([gameVersion, region, realmSlug, nameLower])
+  @@index([archived, priority])
+}
+
+model CharacterSnapshot {
+  id          String   @id @default(cuid())
+  characterId String
+  weekKey     String // e.g. '2026-09-23' — the reset week this snapshot belongs to
+  capturedAt  DateTime @default(now())
+  payload     Json // merged raw profile/equipment data
+  ilvl        Float?
+  mplusRating Int?
+  achievementPoints Int?
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, weekKey])
+  @@index([characterId, capturedAt])
+}
+
+model TaskCatalog {
+  id         String  @id @default(cuid())
+  gameVersion String
+  taskKey    String
+  label      String
+  category   String // raid | mplus | pvp | world | profession | attunement | other
+  scope      String // 'weekly' | 'one_time'
+  source     String // 'auto:<derivationKey>' | 'manual'
+  sortOrder  Int     @default(100)
+  active     Boolean @default(true)
+
+  completions TaskCompletion[]
+
+  @@unique([gameVersion, taskKey])
+}
+
+model TaskCompletion {
+  id          String   @id @default(cuid())
+  characterId String
+  taskKey     String
+  weekKey     String? // null ⇒ one_time task
+  done        Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  character Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  task      TaskCatalog @relation(fields: [taskKey], references: [id])
+
+  @@unique([characterId, taskKey, weekKey])
+  @@index([characterId, weekKey])
+}
+
+model ApiCache {
+  key       String   @id
+  payload   Json
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model JobRun {
+  id         String    @id @default(cuid())
+  type       String // 'rollover_sweep' | 'daily_sweep' | 'manual_refresh'
+  status     String // 'running' | 'success' | 'partial' | 'failed'
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  detail     Json?
+}
