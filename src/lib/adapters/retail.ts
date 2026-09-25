@@ -1,0 +1,126 @@
+// Retail adapter: profile summary, equipment, media, achievements, statistics,
+// mythic-keystone-profile. Merged into one snapshot payload.
+
+import { blizzardGet } from '@/lib/blizzard/client';
+import type { BlizzardError } from '@/lib/blizzard/errors';
+import type {
+  CharacterAdapter,
+  CharacterRef,
+  EndpointSpec,
+  FetchedCharacterData,
+} from './types';
+
+type ProfileSummary = {
+  name?: string;
+  character_class?: { name?: string };
+  active_spec?: { name?: string };
+  level?: number;
+  guild?: { name?: string };
+  average_item_level?: number;
+  achievement_points?: number;
+};
+
+type EquipmentPayload = {
+  equipped_items?: Record<string, { item_level?: { display_value?: string } }>;
+};
+
+type MediaPayload = {
+  assets?: { key?: string; value?: string }[];
+};
+
+type MplusProfile = {
+  current_period?: unknown;
+  season?: { slots?: unknown[]; best_runs?: unknown[] };
+};
+
+type EndpointResponse = ProfileSummary | EquipmentPayload | MediaPayload | MplusProfile | Record<string, unknown>;
+
+function characterEndpoints(ref: CharacterRef): EndpointSpec[] {
+  const base = `/profile/wow/character/${ref.realmSlug}/${ref.nameLower}`;
+  return [
+    { path: base, namespaceKind: 'profile', ttlClass: 'profile', payloadKey: 'profile' },
+    { path: `${base}/equipment`, namespaceKind: 'profile', ttlClass: 'profile', payloadKey: 'equipment' },
+    { path: `${base}/character-media`, namespaceKind: 'profile', ttlClass: 'static', payloadKey: 'media' },
+    { path: `${base}/achievements`, namespaceKind: 'profile', ttlClass: 'achievements', payloadKey: 'achievements' },
+    { path: `${base}/mythic-keystone-profile`, namespaceKind: 'profile', ttlClass: 'profile', payloadKey: 'mythicKeystoneProfile' },
+  ];
+}
+
+export const retailAdapter: CharacterAdapter = {
+  version: 'retail',
+
+  async fetchCharacter(ref: CharacterRef): Promise<FetchedCharacterData> {
+    const endpointErrors: Record<string, string> = {};
+    const payload: Record<string, unknown> = {};
+
+    await Promise.all(
+      characterEndpoints(ref).map(async (spec) => {
+        try {
+          payload[spec.payloadKey] = (await blizzardGet<EndpointResponse>(
+            spec.path,
+            {},
+            {
+              version: 'retail',
+              region: ref.region,
+              namespaceKind: spec.namespaceKind,
+              ttlClass: spec.ttlClass,
+            },
+          )) as Record<string, unknown>;
+        } catch (err) {
+          endpointErrors[spec.payloadKey] = describeError(err);
+        }
+      }),
+    );
+
+    const profile = payload.profile as ProfileSummary | undefined;
+    if (!profile) {
+      // The core profile is the one thing we cannot do without.
+      const firstError = Object.values(endpointErrors)[0] ?? 'profile fetch failed';
+      throw new Error(firstError, { cause: { endpointErrors } });
+    }
+
+    payload._endpointErrors = endpointErrors;
+    payload._fetchedVersion = 'retail';
+
+    const media = payload.media as MediaPayload | undefined;
+    const portrait =
+      media?.assets?.find((a) => a.key === 'avatar')?.value ??
+      media?.assets?.find((a) => a.key === 'inset')?.value ??
+      null;
+
+    return {
+      payload,
+      summary: {
+        name: profile.name ?? ref.nameLower,
+        characterClass: profile.character_class?.name ?? null,
+        spec: profile.active_spec?.name ?? null,
+        level: profile.level ?? null,
+        guildName: profile.guild?.name ?? null,
+        ilvl: parseIlvl(profile.average_item_level),
+        mplusRating: extractMplusRating(payload.mythicKeystoneProfile as MplusProfile | undefined),
+        achievementPoints: profile.achievement_points ?? null,
+        portraitUrl: portrait,
+      },
+    };
+  },
+};
+
+function parseIlvl(v: unknown): number | null {
+  return typeof v === 'number' ? v : null;
+}
+
+function extractMplusRating(profile: MplusProfile | undefined): number | null {
+  const rating = (profile?.season as { ratings?: { rating?: number }[] } | undefined)?.ratings;
+  if (Array.isArray(rating)) {
+    // Season ratings array — take the current (last) season rating.
+    const current = rating[rating.length - 1];
+    if (typeof current?.rating === 'number') return current.rating;
+  }
+  return null;
+}
+
+export function describeError(err: unknown): string {
+  const be = err as BlizzardError;
+  if (be?.status) return `${be.status}: ${be.endpoint ?? ''}`.trim();
+  return err instanceof Error ? err.message : String(err);
+}
