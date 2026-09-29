@@ -14,6 +14,7 @@ import { purgeExpiredCache } from '@/lib/blizzard/cache';
 
 const TICK_INTERVAL_MS = 10 * 60 * 1000;
 const DAILY_STALENESS_MS = 24 * 60 * 60 * 1000;
+const JOB_RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const REGIONS = ['us', 'eu', 'kr', 'tw'];
 
 async function main() {
@@ -31,6 +32,8 @@ async function tick(): Promise<void> {
     await dailySweep(now);
     const purged = await purgeExpiredCache();
     if (purged > 0) console.log(`[worker] purged ${purged} expired cache rows`);
+    const prunedRuns = await pruneOldJobRuns(now);
+    if (prunedRuns > 0) console.log(`[worker] pruned ${prunedRuns} job_runs older than 30 days`);
     if (rolledRegions.length > 0) {
       console.log('[worker] rollover detected for regions:', rolledRegions.join(', '));
     }
@@ -40,7 +43,9 @@ async function tick(): Promise<void> {
 }
 
 // Compare each region's current weekId against the one recorded in the last
-// successful rollover sweep, refresh all characters of changed regions.
+// sweep, refresh all characters of changed regions. A region's weekId is only
+// recorded when its refresh ran with zero failures - failed regions keep the
+// old weekId and are picked up again next tick.
 async function rolloverSweep(now: Date): Promise<string[]> {
   const lastSweep = await prisma.jobRun.findFirst({
     where: { type: 'rollover_sweep', status: { in: ['success', 'partial'] } },
@@ -67,14 +72,25 @@ async function rolloverSweep(now: Date): Promise<string[]> {
     data: { type: 'rollover_sweep', status: 'running' },
   });
 
+  const recordedWeekIds: Record<string, string> = { ...lastWeekIds };
   let status = 'success';
   if (changed.length > 0) {
     const chars = await prisma.character.findMany({
       where: { region: { in: changed }, archived: false },
-      select: { id: true },
+      select: { id: true, region: true },
     });
-    const failures = await refreshByIds(chars.map((c) => c.id), now);
-    status = failures === 0 ? 'success' : 'partial';
+    const idsByRegion = new Map<string, string[]>();
+    for (const c of chars) {
+      idsByRegion.set(c.region, [...(idsByRegion.get(c.region) ?? []), c.id]);
+    }
+    for (const region of changed) {
+      const failures = await refreshByIds(idsByRegion.get(region) ?? [], now);
+      if (failures === 0) {
+        recordedWeekIds[region] = currentWeekIds[region];
+      } else {
+        status = 'partial';
+      }
+    }
   }
 
   await prisma.jobRun.update({
@@ -83,7 +99,7 @@ async function rolloverSweep(now: Date): Promise<string[]> {
       status,
       finishedAt: new Date(),
       detail: {
-        weekIds: currentWeekIds,
+        weekIds: recordedWeekIds,
         rolledRegions: changed,
       },
     },
@@ -132,6 +148,15 @@ async function refreshByIds(ids: string[], now: Date): Promise<number> {
     }
   }
   return failures;
+}
+
+// job_runs is append-per-tick and only ever queried for the latest row per
+// type - anything older than 30 days is noise.
+async function pruneOldJobRuns(now: Date): Promise<number> {
+  const res = await prisma.jobRun.deleteMany({
+    where: { startedAt: { lt: new Date(now.getTime() - JOB_RUN_RETENTION_MS) } },
+  });
+  return res.count;
 }
 
 main().catch((err) => {

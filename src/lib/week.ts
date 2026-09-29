@@ -12,8 +12,8 @@ export type ScheduleMap = Record<string, ResetSchedule>;
 export const DEFAULT_SCHEDULES: ScheduleMap = {
   us: { region: 'us', resetDow: 2, resetHourUtc: 15 }, // Tue 15:00 UTC
   eu: { region: 'eu', resetDow: 3, resetHourUtc: 7 }, // Wed 07:00 UTC
-  kr: { region: 'kr', resetDow: 4, resetHourUtc: 23 }, // Wed 23:00 UTC
-  tw: { region: 'tw', resetDow: 4, resetHourUtc: 23 }, // Wed 23:00 UTC
+  kr: { region: 'kr', resetDow: 4, resetHourUtc: 23 }, // Thu 23:00 UTC
+  tw: { region: 'tw', resetDow: 4, resetHourUtc: 23 }, // Thu 23:00 UTC
 };
 
 const WEEK_MS = 7 * 86_400_000;

@@ -24,14 +24,13 @@ export const gameVersions = [
   },
 ];
 
-// Weekly reset times in UTC.
-// US and EU are verified. KR/TW are seeded as Thursday 07:00 UTC - approximate;
-// verify before actually using those regions.
+// Weekly reset times in UTC. All four regions are verified values and mirror
+// the week engine's DEFAULT_SCHEDULES (kept in lockstep by tests/schedules.test.ts).
 export const resetSchedules = [
   { region: 'us', resetDow: 2, resetHourUtc: 15 }, // Tuesday 15:00 UTC
   { region: 'eu', resetDow: 3, resetHourUtc: 7 }, // Wednesday 07:00 UTC (primary path)
-  { region: 'kr', resetDow: 4, resetHourUtc: 7 }, // approximate
-  { region: 'tw', resetDow: 4, resetHourUtc: 7 }, // approximate
+  { region: 'kr', resetDow: 4, resetHourUtc: 23 }, // Thursday 23:00 UTC
+  { region: 'tw', resetDow: 4, resetHourUtc: 23 }, // Thursday 23:00 UTC
 ];
 
 type SeedTask = {

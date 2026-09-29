@@ -10,6 +10,7 @@ import {
   type TaskState,
 } from '@/lib/tasks';
 import { getAdapter } from '@/lib/adapters';
+import { NotFoundError } from '@/lib/blizzard/errors';
 import type { GameVersion, Region } from '@/lib/blizzard/client';
 
 export const GAME_VERSIONS: { code: GameVersion; label: string }[] = [
@@ -249,9 +250,17 @@ export async function refreshCharacter(
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // NotFound is permanent (character deleted or renamed away) - advancing
+    // lastFetchedAt keeps the daily sweep from retrying a lost cause. Any
+    // transient failure (rate limit, 5xx, network) leaves lastFetchedAt
+    // untouched so the next sweep retries the character.
+    const permanent = err instanceof NotFoundError;
     await prisma.character.update({
       where: { id: characterId },
-      data: { lastFetchError: message, lastFetchedAt: now },
+      data: {
+        lastFetchError: message,
+        ...(permanent ? { lastFetchedAt: now } : {}),
+      },
     });
     return { ok: false, error: message };
   }
