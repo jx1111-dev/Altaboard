@@ -31,7 +31,9 @@ npx prisma migrate deploy
 npx tsx prisma/seed.ts
 npm run dev        # web on :3000
 npm run worker     # refresh loop (separate terminal)
-npm test           # vitest: week + tasks engines
+npm test           # vitest: week + tasks engines, seed/engine schedule pin
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint (flat config, next/core-web-vitals)
 ```
 
 ## Architecture
@@ -45,20 +47,26 @@ npm test           # vitest: week + tasks engines
   web + worker. Redis upgrade path: replace the two functions in `cache.ts`.
 - **`lib/adapters`** — `retail` and `classic1x` behind one interface. Missing
   classic endpoints are omitted; the task engine degrades gracefully.
-- **`lib/week`** — reset engine, pure + vitest-tested. `weekKey(region)` = UTC
-  date of the most recent reset (US Tue 15:00, EU Wed 07:00 UTC).
+- **`lib/week`** — reset engine, pure + vitest-tested. `weekId(region)` = UTC
+  date of the most recent reset (US Tue 15:00, EU Wed 07:00, KR/TW Thu 23:00
+  UTC).
 - **`lib/tasks`** — `deriveTasks`, pure + vitest-tested. Read-time derivation;
   only user toggles write `task_completions`. `unknown` is a first-class state:
   ambiguous or missing API data is surfaced as "unknown — confirm manually",
   never a wrong ✓/✗.
 - **worker** (`worker/index.ts`) — ticks every 10 min: rollover sweep (a
-  region's weekKey changed → refresh all its characters) + daily sweep
-  (`lastFetchedAt` older than 24 h). Logged to `job_runs`.
+  region's weekId changed → refresh all its characters; a region's weekId is
+  only recorded when its refresh ran clean, so failed regions retry next
+  tick) + daily sweep (`lastFetchedAt` older than 24 h; transient fetch errors
+  leave `lastFetchedAt` untouched and are retried, permanent 404s are not).
+  Logged to `job_runs`, pruned after 30 days.
 
 ## Merge precedence
 
-manual completion row > derived state > unknown. Toggle on → upsert row;
-toggle off → delete row (falls back to derived). Auto tasks are never persisted.
+manual completion row > derived state > unknown. Manual rows are user
+overrides on **any** catalog task — auto-derived rows too (e.g. to resolve an
+`unknown` or correct a wrong ✓). Toggle on → upsert row; toggle off → delete
+row (state falls back to derived).
 
 ## Known limitations (by design)
 
@@ -67,13 +75,15 @@ toggle off → delete row (falls back to derived). Auto tasks are never persiste
 - **Equipment** is stored in snapshots from day one but not displayed on the
   MVP board.
 - **No auth** — anyone who can reach the URL can view/edit. Localhost-only
-  contract; do not expose publicly without adding an auth layer (future
-  migration: users/oauth_tokens tables + session layer).
+  contract: Docker Compose binds web (:3000) and postgres (:5432) to
+  `127.0.0.1` only. Do not expose publicly without adding an auth layer
+  (future migration: users/oauth_tokens tables + session layer).
 - **M+ `best_runs`** is known to come back empty from the API — vault slots
   derive from `current_period.runs` instead; an empty runs list means a real
-  "not done", and a misaligned/uncoverable period means `unknown`.
-- **KR/TW reset hours** are seeded as approximate (Thursday 07:00 UTC); verify
-  before actually playing on those regions.
+  "not done", and a misaligned/uncoverable period — or a completed run with
+  no dungeon identity — means `unknown`.
+- **KR/TW reset** lands Thursday 23:00 UTC, same value in the engine
+  (`DEFAULT_SCHEDULES`) and the seed data, pinned by `tests/schedules.test.ts`.
 - **Raid/world vault rows** currently derive as `unknown` until verified
   achievements/statistics timestamps are mapped; confirm those rows manually.
 
