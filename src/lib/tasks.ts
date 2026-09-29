@@ -1,7 +1,8 @@
 // Task engine - pure derivation, no I/O. Vitest-tested (tests/tasks.test.ts).
 // 'unknown' is first-class: ambiguous or missing API data must surface as
-// unknown, never as a wrong yes/no. Only user toggles write task_completions;
-// merge precedence (manual row > derived > unknown) lives in lib/board.
+// unknown, never as a wrong yes/no. Only user toggles write task_completions
+// (as overrides on any task); merge precedence (manual row > derived >
+// unknown) lives in lib/board.
 import { formatWeekId } from '@/lib/week';
 
 export type TaskState = 'done' | 'not_done' | 'unknown';
@@ -92,10 +93,12 @@ function mplusVault(threshold: number): DerivationFn {
     // runs, so we count `runs` and treat an empty list as a real 0 (not_done).
     const completedDungeons = new Set<string>();
     for (const run of runs) {
-      if (run.completed) {
-        const key = run.dungeon?.slug ?? run.dungeon?.name ?? `run-${completedDungeons.size}`;
-        completedDungeons.add(key);
-      }
+      if (!run.completed) continue;
+      const identity = run.dungeon?.slug ?? run.dungeon?.name;
+      // A completed run without dungeon identity cannot be deduped; counting
+      // it anyway could inflate the slot count -> unknown, never a wrong ✓.
+      if (!identity) return 'unknown';
+      completedDungeons.add(identity);
     }
 
     return completedDungeons.size >= threshold ? 'done' : 'not_done';

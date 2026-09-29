@@ -5,6 +5,8 @@ import { DEFAULT_SCHEDULES, currentWeekId } from '@/lib/week';
 
 export const dynamic = 'force-dynamic';
 
+const WEEK_ID_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 type ToggleBody = {
   characterId?: string;
   taskKey?: string;
@@ -12,8 +14,9 @@ type ToggleBody = {
   on?: boolean;
 };
 
-// Toggle a manual check: on upserts the row, off deletes it (state falls back
-// to derived). Auto tasks are never persisted.
+// Toggle a task: on upserts the user's completion row, off deletes it (state
+// falls back to derived). Rows are user overrides on ANY catalog task - auto
+// tasks stay derived until overridden, manual tasks are always user-driven.
 export async function POST(req: NextRequest) {
   let body: ToggleBody;
   try {
@@ -43,11 +46,20 @@ export async function POST(req: NextRequest) {
   if (task.scope === 'one_time') {
     weekId = null;
   } else if (body.weekId) {
+    // Client-supplied weekIds are persisted verbatim; keep the format honest.
+    if (!WEEK_ID_RE.test(body.weekId)) {
+      return NextResponse.json({ error: 'weekId must be YYYY-MM-DD' }, { status: 400 });
+    }
     weekId = body.weekId;
   } else {
     weekId = currentWeekId(character.region, new Date(), DEFAULT_SCHEDULES);
   }
 
-  await toggleTaskCompletion(characterId, taskKey, weekId, body.on !== false);
+  try {
+    await toggleTaskCompletion(characterId, taskKey, weekId, body.on !== false);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'toggle failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, taskKey, weekId, on: body.on !== false });
 }

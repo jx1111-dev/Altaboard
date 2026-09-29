@@ -74,11 +74,14 @@ model TaskCatalog {
   sortOrder  Int     @default(100)
   active     Boolean @default(true)
 
-  completions TaskCompletion[]
-
   @@unique([gameVersion, taskKey])
 }
 
+// taskKey is a plain string, not a relation: the toggle route validates it
+// against TaskCatalog at write time, and completion rows must survive catalog
+// edits (deactivate/rekey) without FK drama. Prisma cannot model the one_time
+// partial unique index (weekId IS NULL); it is hand-written in SQL and
+// re-asserted by every migration that touches this table.
 model TaskCompletion {
   id          String   @id @default(cuid())
   characterId String
@@ -87,8 +90,7 @@ model TaskCompletion {
   done        Boolean  @default(true)
   updatedAt   DateTime @updatedAt
 
-  character Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
-  task      TaskCatalog @relation(fields: [taskKey], references: [id])
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
   @@unique([characterId, taskKey, weekId])
   @@index([characterId, weekId])

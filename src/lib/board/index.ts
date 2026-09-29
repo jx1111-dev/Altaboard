@@ -1,7 +1,7 @@
 // Board service: read-time task state assembly + character refresh.
 // Server Components and API routes both call these functions directly.
 
-import { prisma } from '@/server/prisma';
+import { prisma, isUniqueViolation } from '@/server/prisma';
 import { currentWeekId } from '@/lib/week';
 import {
   deriveTasks,
@@ -160,9 +160,22 @@ export async function toggleTaskCompletion(
         where: { id: existing.id },
         data: { done: true },
       });
-    } else {
+      return;
+    }
+    try {
       await prisma.taskCompletion.create({
         data: { characterId, taskKey, weekId, done: true },
+      });
+    } catch (err) {
+      // Lost the unique-index race to a concurrent toggle - the row now
+      // exists, so flip to an update of the winner's row.
+      if (!isUniqueViolation(err)) throw err;
+      const winner = await prisma.taskCompletion.findFirstOrThrow({
+        where: { characterId, taskKey, weekId },
+      });
+      await prisma.taskCompletion.update({
+        where: { id: winner.id },
+        data: { done: true },
       });
     }
   } else {

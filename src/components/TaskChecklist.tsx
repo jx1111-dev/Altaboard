@@ -11,11 +11,13 @@ type Props = {
 // Task checklist on the character card. Legend:
 // auto tasks: derived-done shows a checkmark, derived-not-done a blank box,
 // unknown a "?" - manual tasks show a dashed unchecked box until toggled.
-// Toggle on persists a manual row, toggle off deletes it (falls back to
-// derived state).
+// Every row is clickable: toggle on persists a user override for ANY task
+// (auto rows included - e.g. to resolve an unknown or correct a wrong ✓),
+// toggle off deletes the override and falls back to the derived state.
 export default function TaskChecklist({ characterId, tasks }: Props) {
   const [, startTransition] = useTransition();
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function toggle(task: BoardTask) {
     const isManualSet = task.manuallySet || task.taskKey in overrides;
@@ -25,6 +27,12 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
     const nextOn = !currentlyOn;
 
     setOverrides((prev) => ({ ...prev, [task.taskKey]: nextOn }));
+    setErrors((prev) => {
+      if (!(task.taskKey in prev)) return prev;
+      const copy = { ...prev };
+      delete copy[task.taskKey];
+      return copy;
+    });
 
     startTransition(() => {
       fetch('/api/task-completions', {
@@ -33,14 +41,19 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
         body: JSON.stringify({ characterId, taskKey: task.taskKey, on: nextOn }),
       })
         .then(async (res) => {
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+          if (!res.ok) {
+            throw new Error((await res.json().catch(() => ({}))).error ?? 'toggle failed');
+          }
         })
-        .catch(() => {
+        .catch((err: Error) => {
+          // Revert the optimistic flip and say why - silent reverts read as
+          // "the click did nothing".
           setOverrides((prev) => {
             const copy = { ...prev };
             delete copy[task.taskKey];
             return copy;
           });
+          setErrors((prev) => ({ ...prev, [task.taskKey]: err.message }));
         });
     });
   }
@@ -101,6 +114,9 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
                 {task.label}
               </span>
             </button>
+            {errors[task.taskKey] && (
+              <p className="pl-7 text-xs text-[var(--error)]">{errors[task.taskKey]}</p>
+            )}
           </li>
         );
       })}
