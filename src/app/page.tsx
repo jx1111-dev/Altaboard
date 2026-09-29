@@ -49,9 +49,7 @@ export default async function BoardPage({ searchParams }: Props) {
 }
 
 function CharacterCard({ character }: { character: BoardCharacter }) {
-  const portrait =
-    (character.snapshot?.payload?.media as { assets?: { key: string; value: string }[] } | undefined)
-      ?.assets?.find((a) => a.key === 'avatar')?.value;
+  const portrait = character.snapshot?.portraitUrl;
 
   return (
     <article className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-4 flex flex-col gap-3">

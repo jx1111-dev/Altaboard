@@ -13,7 +13,12 @@ type Row = {
   groupName: string | null;
 };
 
-export default function CharacterSettingsTable({ characters }: { characters: Row[] }) {
+type Props = {
+  characters: Row[];
+  archived?: Row[];
+};
+
+export default function CharacterSettingsTable({ characters, archived = [] }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,13 +44,32 @@ export default function CharacterSettingsTable({ characters }: { characters: Row
     }
   }
 
+  async function remove(id: string) {
+    if (!window.confirm('Delete this character and ALL its snapshots? This cannot be undone.'))
+      return;
+    setSaving(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/characters/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? 'delete failed');
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'delete failed');
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function archive(id: string) {
     if (!window.confirm('Archive this character? It leaves the board but keeps its snapshots.'))
       return;
     await patch(id, { archived: true });
   }
 
-  if (characters.length === 0) {
+  if (characters.length === 0 && archived.length === 0) {
     return <p className="text-[var(--muted)]">No characters yet.</p>;
   }
 
@@ -77,8 +101,12 @@ export default function CharacterSettingsTable({ characters }: { characters: Row
                   type="number"
                   defaultValue={c.priority}
                   onBlur={(e) => {
-                    const v = Number(e.target.value);
-                    if (v !== c.priority) patch(c.id, { priority: v });
+                    const raw = e.target.value.trim();
+                    // Empty or non-numeric input is a mis-tap, not a priority of zero.
+                    if (raw === '') return;
+                    const v = Number(raw);
+                    if (Number.isNaN(v) || v === c.priority) return;
+                    patch(c.id, { priority: v });
                   }}
                   className="w-20 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1"
                 />
@@ -109,6 +137,41 @@ export default function CharacterSettingsTable({ characters }: { characters: Row
         </tbody>
       </table>
       {saving && <p className="text-xs text-[var(--muted)]">saving…</p>}
+      {archived.length > 0 && (
+        <div className="mt-8 space-y-2">
+          <h2 className="text-xs uppercase tracking-wider text-[var(--muted)]">
+            Archived ({archived.length})
+          </h2>
+          <ul className="space-y-1">
+            {archived.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="font-medium">{c.name}</span>
+                <span className="text-xs text-[var(--muted)]">
+                  {c.gameVersion} · {c.region.toUpperCase()} · {c.realmSlug}
+                </span>
+                <span className="ml-auto flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => patch(c.id, { archived: false })}
+                    disabled={saving === c.id}
+                    className="text-xs text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-40"
+                  >
+                    unarchive
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(c.id)}
+                    disabled={saving === c.id}
+                    className="text-xs text-[var(--muted)] hover:text-[var(--error)] disabled:opacity-40"
+                  >
+                    delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

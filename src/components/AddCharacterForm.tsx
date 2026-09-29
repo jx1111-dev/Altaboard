@@ -62,7 +62,8 @@ export default function AddCharacterForm({ defaultVersion, defaultRegion }: Prop
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, realmSlug, region, gameVersion: version }),
       });
-      const data = await res.json();
+      // A proxy/HTML error page has no JSON body - never trust res.json().
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? 'add failed');
       } else {

@@ -44,6 +44,8 @@ export type FetchOptions = {
 };
 
 const RETRYABLE_5XX = new Set([500, 502, 503, 504]);
+// Hung requests must not pin worker slots / rate-limiter tokens forever.
+const FETCH_TIMEOUT_MS = 15_000;
 
 function jitteredDelay(attempt: number): number {
   const base = 500 * Math.pow(2, attempt);
@@ -70,7 +72,7 @@ export async function blizzardGet<T = unknown>(
   const query = new URLSearchParams(params);
   if (namespaceKind) {
     query.set('namespace', namespace(version, namespaceKind, region));
-    query.set('locale', region === 'us' ? 'en-us' : 'en-us');
+    query.set('locale', 'en-us');
   }
 
   return fetchWithAuth<T>(`${apiHost(region)}${endpoint}`, query, key, options, 0);
@@ -91,6 +93,7 @@ async function fetchWithAuth<T>(
   const res = await fetch(fullUrl, {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (res.ok) {
@@ -112,6 +115,12 @@ async function fetchWithAuth<T>(
   if (res.status === 404) throw new NotFoundError(url);
 
   if (res.status === 429) {
+    // One jittered retry - the token bucket may already cover the burst.
+    // A second 429 surfaces as RateLimitError to the caller.
+    if (attempt < 1) {
+      await sleep(jitteredDelay(attempt));
+      return fetchWithAuth<T>(url, query, key, options, attempt + 1);
+    }
     throw new RateLimitError(url);
   }
 

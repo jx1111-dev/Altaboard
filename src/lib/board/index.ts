@@ -45,12 +45,25 @@ export type BoardCharacter = {
     ilvl: number | null;
     mplusRating: number | null;
     achievementPoints: number | null;
+    portraitUrl: string | null;
     payload: Record<string, unknown>;
   } | null;
   tasks: BoardTask[];
   lastFetchedAt: Date | null;
   lastFetchError: string | null;
 };
+
+// Portraits live inside the snapshot payload's media section; dig them out
+// once here so the UI never reaches into payload internals.
+function portraitFromPayload(payload: Record<string, unknown>): string | null {
+  const assets = (payload.media as { assets?: { key?: string; value?: string }[] } | undefined)
+    ?.assets;
+  return (
+    assets?.find((a) => a.key === 'avatar')?.value ??
+    assets?.find((a) => a.key === 'inset')?.value ??
+    null
+  );
+}
 
 export async function getBoard(version: GameVersion): Promise<{
   version: GameVersion;
@@ -80,15 +93,27 @@ export async function getBoard(version: GameVersion): Promise<{
     sortOrder: t.sortOrder,
   }));
 
+  // One grouped query for every character's completions (per-character
+  // queries were N+1). Regions can sit in different weeks, so match any of
+  // them; rows are keyed per character below.
+  const weekIds = [...new Set(characters.map((c) => currentWeekId(c.region, now)))];
+  const completionRows = await prisma.taskCompletion.findMany({
+    where: {
+      characterId: { in: characters.map((c) => c.id) },
+      OR: [{ weekId: { in: weekIds } }, { weekId: null }],
+    },
+  });
+  const completionsByCharacter = new Map<string, { taskKey: string; done: boolean }[]>();
+  for (const row of completionRows) {
+    const rows = completionsByCharacter.get(row.characterId) ?? [];
+    rows.push({ taskKey: row.taskKey, done: row.done });
+    completionsByCharacter.set(row.characterId, rows);
+  }
+
   const board: BoardCharacter[] = await Promise.all(
     characters.map(async (c) => {
       const weekId = currentWeekId(c.region, now);
-      const completions = await prisma.taskCompletion.findMany({
-        where: {
-          characterId: c.id,
-          OR: [{ weekId }, { weekId: null }],
-        },
-      });
+      const completions = completionsByCharacter.get(c.id) ?? [];
 
       const latest = c.snapshots[0] ?? null;
       const derived = deriveTasks(
@@ -98,10 +123,7 @@ export async function getBoard(version: GameVersion): Promise<{
         c.region,
         now,
       );
-      const merged = mergeTasks(
-        derived,
-        completions.map((row) => ({ taskKey: row.taskKey, done: row.done })),
-      );
+      const merged = mergeTasks(derived, completions);
 
       return {
         id: c.id,
@@ -121,6 +143,7 @@ export async function getBoard(version: GameVersion): Promise<{
               ilvl: latest.ilvl,
               mplusRating: latest.mplusRating,
               achievementPoints: latest.achievementPoints,
+              portraitUrl: portraitFromPayload(latest.payload as Record<string, unknown>),
               payload: latest.payload as Record<string, unknown>,
             }
           : null,

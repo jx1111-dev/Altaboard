@@ -7,6 +7,8 @@ import { AuthError } from './errors';
 
 const TOKEN_URL = 'https://oauth.battle.net/token';
 const EXPIRY_MARGIN_MS = 60 * 1000; // refresh a minute early
+// Kept in step with the API timeout in client.ts (importing it back would cycle).
+const FETCH_TIMEOUT_MS = 15_000;
 
 function credentials(): { id: string; secret: string } {
   const id = process.env.BLIZZARD_CLIENT_ID;
@@ -39,6 +41,7 @@ export async function getToken(forceRefresh = false): Promise<string> {
     },
     body: 'grant_type=client_credentials',
     cache: 'no-store',
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {

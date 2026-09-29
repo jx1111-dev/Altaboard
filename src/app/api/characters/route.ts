@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/server/prisma';
+import { prisma, isUniqueViolation } from '@/server/prisma';
 import { refreshCharacter } from '@/lib/board';
 import type { GameVersion, Region } from '@/lib/blizzard/client';
 
@@ -7,6 +7,9 @@ export const dynamic = 'force-dynamic';
 
 const VERSIONS = new Set(['retail', 'classic1x']);
 const REGIONS = new Set(['us', 'eu', 'kr', 'tw']);
+// WoW names are letters only; realm slugs are lowercase letters/digits/hyphens.
+const NAME_RE = /^[a-zA-Z]+$/;
+const REALM_SLUG_RE = /^[a-z0-9-]+$/;
 
 type AddBody = {
   name?: string;
@@ -38,6 +41,12 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  if (!NAME_RE.test(name) || !REALM_SLUG_RE.test(realmSlug)) {
+    return NextResponse.json(
+      { error: 'name must be letters only, realmSlug must be lowercase letters, digits or hyphens' },
+      { status: 400 },
+    );
+  }
 
   const nameLower = name.toLowerCase();
 
@@ -50,9 +59,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'character already on the board' }, { status: 409 });
   }
 
-  const character = await prisma.character.create({
-    data: { gameVersion, region, realmSlug, nameLower, name },
-  });
+  let character;
+  try {
+    character = await prisma.character.create({
+      data: { gameVersion, region, realmSlug, nameLower, name },
+    });
+  } catch (err) {
+    // The pre-check above is advisory; the unique index is the real gate.
+    if (isUniqueViolation(err)) {
+      return NextResponse.json({ error: 'character already on the board' }, { status: 409 });
+    }
+    throw err;
+  }
 
   // First fetch is synchronous so the user immediately sees the card (or the
   // fetch error badge on it). Rate-limit-guarded inside the client.

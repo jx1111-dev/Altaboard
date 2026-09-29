@@ -3,6 +3,9 @@ import { prisma } from '@/server/prisma';
 
 export const dynamic = 'force-dynamic';
 
+const PRIORITY_MIN = 0;
+const PRIORITY_MAX = 1000;
+
 type PatchBody = {
   priority?: number;
   groupName?: string | null;
@@ -22,7 +25,10 @@ export async function PATCH(
   }
 
   const data: Record<string, unknown> = {};
-  if (typeof body.priority === 'number') data.priority = body.priority;
+  if (typeof body.priority === 'number' && Number.isFinite(body.priority)) {
+    // Round + clamp instead of letting the client own the sort order.
+    data.priority = Math.min(PRIORITY_MAX, Math.max(PRIORITY_MIN, Math.round(body.priority)));
+  }
   if (body.groupName !== undefined) {
     data.groupName = body.groupName === null || body.groupName === '' ? null : String(body.groupName);
   }
