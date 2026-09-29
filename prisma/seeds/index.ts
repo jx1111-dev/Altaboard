@@ -25,7 +25,7 @@ export const gameVersions = [
 ];
 
 // Weekly reset times in UTC.
-// US and EU are verified. KR/TW are seeded as Thursday 07:00 UTC — approximate;
+// US and EU are verified. KR/TW are seeded as Thursday 07:00 UTC - approximate;
 // verify before actually using those regions.
 export const resetSchedules = [
   { region: 'us', resetDow: 2, resetHourUtc: 15 }, // Tuesday 15:00 UTC
@@ -46,7 +46,7 @@ type SeedTask = {
 };
 
 const retailTasks: SeedTask[] = [
-  // Great Vault M+ slots — derived from mythic-keystone-profile runs.
+  // Great Vault M+ slots, derived from mythic-keystone-profile runs.
   {
     gameVersion: 'retail',
     taskKey: 'vault_mplus_1',
@@ -115,7 +115,7 @@ const retailTasks: SeedTask[] = [
 ];
 
 const classicTasks: SeedTask[] = [
-  // Classic is mostly manual — thin API data degrades to manual checks by design.
+  // Classic is mostly manual - thin API data degrades to manual checks by design.
   {
     gameVersion: 'classic1x',
     taskKey: 'lockout_mc',
@@ -230,3 +230,22 @@ export const taskCatalog: SeedTask[] = [...retailTasks, ...classicTasks].map((t)
   ...t,
   active: t.active ?? true,
 }));
+
+// Demo characters for mock mode (MOCK_BLIZZARD=1): the seed fetches their
+// snapshot through the mock adapter. Real (non-mock) seeds never touch them.
+export type DemoCharacter = {
+  gameVersion: string;
+  region: string;
+  realmSlug: string;
+  name: string;
+  groupName?: string;
+  priority?: number;
+};
+
+export const demoClassicCharacters: DemoCharacter[] = [
+  { gameVersion: 'classic1x', region: 'eu', realmSlug: 'mirage-raceway', name: 'Thrag', groupName: 'Raid Core', priority: 10 },
+  { gameVersion: 'classic1x', region: 'eu', realmSlug: 'mirage-raceway', name: 'Elowen', groupName: 'Raid Core', priority: 20 },
+  { gameVersion: 'classic1x', region: 'eu', realmSlug: 'nethergarde-keep', name: 'Grimwald', groupName: 'Alts', priority: 80 },
+  { gameVersion: 'classic1x', region: 'eu', realmSlug: 'patchwerk', name: 'Sylvara', groupName: 'Alts', priority: 90 },
+  { gameVersion: 'classic1x', region: 'eu', realmSlug: 'patchwerk', name: 'Borin' },
+];

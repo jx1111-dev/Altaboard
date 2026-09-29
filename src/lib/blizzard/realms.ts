@@ -1,6 +1,5 @@
-// Realm resolution — used by the add-character form autocomplete.
-// Calls the realm-index endpoint per game version so users pick realm names
-// and slugs are resolved automatically.
+// Realm resolution for the add-character form autocomplete: fetches the
+// realm-index endpoint per game version so realm slugs resolve automatically.
 
 import { blizzardGet } from './client';
 

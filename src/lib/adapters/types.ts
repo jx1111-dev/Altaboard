@@ -1,7 +1,6 @@
-// Adapter interface — one shape for every game version.
-// Each adapter fetches the raw endpoints it can for its version and returns a
-// merged payload stored in character_snapshots.payload. Missing endpoints are
-// simply absent from the payload; the task engine degrades to 'unknown'.
+// Adapter interface: one shape for every game version. Each adapter fetches
+// the raw endpoints it can and returns a merged payload for the snapshot;
+// missing endpoints degrade the task engine to 'unknown'.
 
 import type { GameVersion, NamespaceKind, Region } from '@/lib/blizzard/client';
 
@@ -29,11 +28,8 @@ export type FetchedCharacterData = {
 
 export type CharacterAdapter = {
   version: GameVersion;
-  /**
-   * Fetch all available raw data for a character. Endpoints are fetched
-   * independently: one 404/403 must not sink the whole fetch — the failing
-   * section is omitted and the error recorded.
-   */
+  // Endpoints are fetched independently: one 404/403 must not sink the whole
+  // fetch - the failing section is omitted and the error recorded.
   fetchCharacter(ref: CharacterRef): Promise<FetchedCharacterData>;
 };
 

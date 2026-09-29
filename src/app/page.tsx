@@ -19,19 +19,15 @@ export default async function BoardPage({ searchParams }: Props) {
   const board = await getBoard(version);
   const hasCharacters = board.characters.length > 0;
 
-  // Group characters by user-defined group; ungrouped go last under their own heading.
-  const groups = new Map<string, BoardCharacter[]>();
-  for (const c of board.characters) {
-    const key = c.groupName ?? 'Ungrouped';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(c);
-  }
-
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <VersionTabs versions={GAME_VERSIONS} active={version} />
-        <RefreshAllButton characterIds={board.characters.map((c) => c.id)} />
+        <RefreshButton
+          characterId={null}
+          characterIds={board.characters.map((c) => c.id)}
+          label="Refresh all"
+        />
       </div>
 
       <AddCharacterForm defaultVersion={version} defaultRegion="eu" />
@@ -43,29 +39,12 @@ export default async function BoardPage({ searchParams }: Props) {
         </div>
       )}
 
-      {[...groups.entries()].map(([group, chars]) => (
-        <section key={group} className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--muted)]">
-            {group}
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {chars.map((c) => (
-              <CharacterCard key={c.id} character={c} />
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {board.characters.map((c) => (
+          <CharacterCard key={c.id} character={c} />
+        ))}
+      </div>
     </div>
-  );
-}
-
-function RefreshAllButton({ characterIds }: { characterIds: string[] }) {
-  return (
-    <RefreshButton
-      characterId={null}
-      characterIds={characterIds}
-      label="Refresh all"
-    />
   );
 }
 
@@ -133,7 +112,7 @@ function CharacterCard({ character }: { character: BoardCharacter }) {
 
       <div className="flex items-center justify-between text-xs text-[var(--muted)]">
         <span>
-          Week {character.weekKey}
+          Week {character.weekId}
           {character.snapshot
             ? ` · fetched ${new Date(character.snapshot.capturedAt).toLocaleString()}`
             : ' · no snapshot yet'}

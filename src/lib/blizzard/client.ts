@@ -1,13 +1,8 @@
-// Blizzard API client — ONE implementation shared by web + worker.
-//
-// - Hosts: https://{region}.api.blizzard.com, token host https://oauth.battle.net
-// - Namespaces:
-//     retail:  profile-{region} | dynamic-{region} | static-{region}
-//     classic: profile-classic1x-{region} | dynamic-classic1x-{region}
-// - Cache-first with TTL classes; rate-limited via per-process token bucket.
-// - Error handling: 404 → NotFoundError; 401/403 → one token refresh + retry,
-//   then AuthError (classic endpoints intermittently 403 = data unavailable);
-//   429 → RateLimitError (caller backs off); 5xx → jittered retry (x2).
+// Blizzard API client, one implementation shared by web + worker.
+// Cache-first with TTL classes, rate-limited via a per-process token bucket.
+// Namespaces:
+//   retail:  profile-{region} | dynamic-{region} | static-{region}
+//   classic: profile-classic1x-{region} | dynamic-classic1x-{region}
 
 import { acquireSlot } from './rateLimiter';
 import { cacheKey, getCached, putCached, TTL_MS, type TtlClass } from './cache';
@@ -23,11 +18,11 @@ export type Region = 'us' | 'eu' | 'kr' | 'tw';
 export type GameVersion = 'retail' | 'classic1x';
 export type NamespaceKind = 'profile' | 'dynamic' | 'static';
 
-export function apiHost(region: string): string {
+function apiHost(region: string): string {
   return `https://${region}.api.blizzard.com`;
 }
 
-export function namespace(
+function namespace(
   version: GameVersion,
   kind: NamespaceKind,
   region: Region,
@@ -43,7 +38,7 @@ export type FetchOptions = {
   region: Region;
   namespaceKind?: NamespaceKind;
   ttlClass?: TtlClass;
-  /** Skip the cache read (manual refresh); result still written to cache. */
+  // Skip the cache read (manual refresh); result still written to cache.
   bypassCache?: boolean;
   maxRetries?: number;
 };
@@ -59,10 +54,6 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/**
- * GET a Blizzard API JSON resource with caching, rate limiting and error
- * translation. Never throws on a cache hit.
- */
 export async function blizzardGet<T = unknown>(
   endpoint: string,
   params: Record<string, string> = {},
@@ -129,8 +120,5 @@ async function fetchWithAuth<T>(
     return fetchWithAuth<T>(url, query, key, options, attempt + 1);
   }
 
-  if (res.status >= 500) throw new ServerError(res.status, url);
-
-  // Any other unexpected status.
   throw new ServerError(res.status, url);
 }

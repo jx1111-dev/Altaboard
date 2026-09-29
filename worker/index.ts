@@ -1,18 +1,14 @@
-// Worker — one container, one loop.
-//
-// Every 10 minutes it evaluates explicit triggers (no TTL conflation):
-//   (a) rollover sweep — a region's weekKey changed since the last tick →
-//       refresh all characters in that region (new week starts with fresh
-//       fetches; previous week's snapshot stands as history)
-//   (b) daily sweep — characters whose lastFetchedAt is older than 24 h
+// Worker: one container, one loop. Every 10 minutes it evaluates explicit
+// triggers (no TTL conflation):
+// - rollover sweep: a region's weekId changed since the last tick -> refresh
+//   all characters in that region (previous week's snapshot stands as history)
+// - daily sweep: characters whose lastFetchedAt is older than 24 h
 // plus it purges expired cache rows and logs each sweep to job_runs.
-//
-// Sweeps are rate-budgeted (the shared token bucket) and resumable: each
-// character refresh is independent and one bad character never crashes the
-// worker.
+// Sweeps are rate-budgeted (shared token bucket); one bad character never
+// crashes the worker.
 
 import { prisma } from '@/server/prisma';
-import { weekKeyFor, DEFAULT_SCHEDULES } from '@/lib/week';
+import { currentWeekId, DEFAULT_SCHEDULES } from '@/lib/week';
 import { refreshCharacter } from '@/lib/board';
 import { purgeExpiredCache } from '@/lib/blizzard/cache';
 
@@ -21,7 +17,7 @@ const DAILY_STALENESS_MS = 24 * 60 * 60 * 1000;
 const REGIONS = ['us', 'eu', 'kr', 'tw'];
 
 async function main() {
-  console.log('[worker] started — ticking every', TICK_INTERVAL_MS / 60000, 'min');
+  console.log('[worker] started - ticking every', TICK_INTERVAL_MS / 60000, 'min');
   await tick(); // run immediately on startup
   setInterval(() => void tick(), TICK_INTERVAL_MS);
 }
@@ -43,31 +39,28 @@ async function tick(): Promise<void> {
   }
 }
 
-/**
- * Compare each region's current weekKey against the one recorded in the last
- * successful rollover sweep. Refresh all characters of changed regions.
- * Returns the list of regions that rolled over.
- */
+// Compare each region's current weekId against the one recorded in the last
+// successful rollover sweep, refresh all characters of changed regions.
 async function rolloverSweep(now: Date): Promise<string[]> {
   const lastSweep = await prisma.jobRun.findFirst({
     where: { type: 'rollover_sweep', status: { in: ['success', 'partial'] } },
     orderBy: { startedAt: 'desc' },
   });
 
-  const lastWeekKeys: Record<string, string> =
-    (lastSweep?.detail as { weekKeys?: Record<string, string> } | null)?.weekKeys ?? {};
+  const lastWeekIds: Record<string, string> =
+    (lastSweep?.detail as { weekIds?: Record<string, string> } | null)?.weekIds ?? {};
 
-  const currentWeekKeys: Record<string, string> = {};
+  const currentWeekIds: Record<string, string> = {};
   for (const region of REGIONS) {
     try {
-      currentWeekKeys[region] = weekKeyFor(region, now, DEFAULT_SCHEDULES);
+      currentWeekIds[region] = currentWeekId(region, now, DEFAULT_SCHEDULES);
     } catch {
-      // region not in schedule — skip
+      // region not in schedule - skip
     }
   }
 
   const changed = REGIONS.filter(
-    (r) => currentWeekKeys[r] !== undefined && currentWeekKeys[r] !== lastWeekKeys[r],
+    (r) => currentWeekIds[r] !== undefined && currentWeekIds[r] !== lastWeekIds[r],
   );
 
   const job = await prisma.jobRun.create({
@@ -76,10 +69,11 @@ async function rolloverSweep(now: Date): Promise<string[]> {
 
   let status = 'success';
   if (changed.length > 0) {
-    const failures = await refreshByFilter(
-      { region: { in: changed }, archived: false },
-      now,
-    );
+    const chars = await prisma.character.findMany({
+      where: { region: { in: changed }, archived: false },
+      select: { id: true },
+    });
+    const failures = await refreshByIds(chars.map((c) => c.id), now);
     status = failures === 0 ? 'success' : 'partial';
   }
 
@@ -89,7 +83,7 @@ async function rolloverSweep(now: Date): Promise<string[]> {
       status,
       finishedAt: new Date(),
       detail: {
-        weekKeys: currentWeekKeys,
+        weekIds: currentWeekIds,
         rolledRegions: changed,
       },
     },
@@ -98,9 +92,7 @@ async function rolloverSweep(now: Date): Promise<string[]> {
   return changed;
 }
 
-/**
- * Refresh characters whose lastFetchedAt is older than 24 h (or never fetched).
- */
+// Refresh characters whose lastFetchedAt is older than 24 h (or never fetched).
 async function dailySweep(now: Date): Promise<void> {
   const job = await prisma.jobRun.create({
     data: { type: 'daily_sweep', status: 'running' },
@@ -140,14 +132,6 @@ async function refreshByIds(ids: string[], now: Date): Promise<number> {
     }
   }
   return failures;
-}
-
-async function refreshByFilter(
-  where: { region?: { in: string[] }; archived: boolean },
-  now: Date,
-): Promise<number> {
-  const chars = await prisma.character.findMany({ where, select: { id: true } });
-  return refreshByIds(chars.map((c) => c.id), now);
 }
 
 main().catch((err) => {

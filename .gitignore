@@ -10,13 +10,16 @@ next-env.d.ts
 build/
 dist/
 
-# Environment — secrets never committed
+# Environment - secrets never committed
 .env
 .env.local
 .env*.local
 
 # Prisma
 prisma/*.db
+
+# Build info
+*.tsbuildinfo
 
 # Logs & misc
 *.log

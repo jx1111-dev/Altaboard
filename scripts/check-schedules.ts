@@ -2,7 +2,7 @@
 // Run: npx tsx scripts/check-schedules.ts  (requires DATABASE_URL)
 
 import { prisma } from '../src/server/prisma';
-import { DEFAULT_SCHEDULES, weekKeyFor } from '../src/lib/week';
+import { DEFAULT_SCHEDULES, currentWeekId } from '../src/lib/week';
 
 async function main() {
   const schedules = await prisma.resetSchedule.findMany();
@@ -24,12 +24,12 @@ async function main() {
   }
 
   for (const region of ['us', 'eu', 'kr', 'tw']) {
-    const wk = weekKeyFor(region);
-    const next = weekKeyFor(region, new Date(Date.now() + 7.5 * 86_400_000));
-    console.log(`${region}: week ${wk} (next week: ${next})`);
+    const weekId = currentWeekId(region);
+    const next = currentWeekId(region, new Date(Date.now() + 7.5 * 86_400_000));
+    console.log(`${region}: week ${weekId} (next week: ${next})`);
   }
 
-  console.log(ok ? 'schedules consistent' : 'SCHEDULE MISMATCH — fix seeds');
+  console.log(ok ? 'schedules consistent' : 'SCHEDULE MISMATCH - fix seeds');
   process.exit(ok ? 0 : 1);
 }
 

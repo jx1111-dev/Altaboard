@@ -12,7 +12,7 @@ export class BlizzardError extends Error {
   }
 }
 
-/** 404 — character/endpoint does not exist. Keep last snapshot, set lastFetchError. */
+// 404 - character/endpoint does not exist. Keep last snapshot, set lastFetchError.
 export class NotFoundError extends BlizzardError {
   constructor(endpoint: string) {
     super('Not found', 404, endpoint);
@@ -20,7 +20,7 @@ export class NotFoundError extends BlizzardError {
   }
 }
 
-/** 401/403 — auth or data-unavailable. Classic endpoints 403 intermittently when data is unavailable. */
+// 401/403 - auth or data-unavailable. Classic endpoints 403 intermittently when data is unavailable.
 export class AuthError extends BlizzardError {
   constructor(status: number, endpoint: string) {
     super('Auth error or data unavailable', status, endpoint);
@@ -28,7 +28,7 @@ export class AuthError extends BlizzardError {
   }
 }
 
-/** 429 — rate limited; back off. */
+// 429 - rate limited; back off.
 export class RateLimitError extends BlizzardError {
   constructor(endpoint: string) {
     super('Rate limited', 429, endpoint);
@@ -36,7 +36,7 @@ export class RateLimitError extends BlizzardError {
   }
 }
 
-/** 5xx — transient; retry with jitter. */
+// 5xx - transient; retry with jitter.
 export class ServerError extends BlizzardError {
   constructor(status: number, endpoint: string) {
     super(`Server error ${status}`, status, endpoint);

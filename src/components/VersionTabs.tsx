@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 type Props = {
   versions: { code: string; label: string }[];
@@ -10,13 +10,12 @@ type Props = {
 
 export default function VersionTabs({ versions, active }: Props) {
   const pathname = usePathname();
-  const params = useSearchParams();
-  const currentVersion = params.get('version');
 
   return (
     <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-1">
       {versions.map((v) => {
-        const search = new URLSearchParams(currentVersion ? { version: v.code } : {});
+        // Retail stays the canonical no-param URL; other versions always get ?version=…
+        const search = new URLSearchParams({ version: v.code });
         if (v.code === 'retail') search.delete('version');
         const href = `${pathname}${search.toString() ? `?${search}` : ''}`;
         const isActive = v.code === active;

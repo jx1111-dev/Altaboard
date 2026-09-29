@@ -5,6 +5,7 @@ services:
       POSTGRES_USER: altaboard
       POSTGRES_PASSWORD: altaboard
       POSTGRES_DB: altaboard
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     ports:
       - "5432:5432"
     volumes:
@@ -23,6 +24,7 @@ services:
       DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
       BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
+      MOCK_BLIZZARD: ${MOCK_BLIZZARD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +40,7 @@ services:
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
       BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
       DEFAULT_REGION: ${DEFAULT_REGION:-eu}
+      MOCK_BLIZZARD: ${MOCK_BLIZZARD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +60,7 @@ services:
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
       BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
       DEFAULT_REGION: ${DEFAULT_REGION:-eu}
+      MOCK_BLIZZARD: ${MOCK_BLIZZARD:-}
     depends_on:
       db:
         condition: service_healthy

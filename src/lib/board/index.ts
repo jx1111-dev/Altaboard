@@ -1,8 +1,8 @@
-// Board service — read-time task state assembly + character refresh.
+// Board service: read-time task state assembly + character refresh.
 // Server Components and API routes both call these functions directly.
 
 import { prisma } from '@/server/prisma';
-import { weekKeyFor, fromWeekKey, isNextWeek } from '@/lib/week';
+import { currentWeekId } from '@/lib/week';
 import {
   deriveTasks,
   mergeTasks,
@@ -16,10 +16,6 @@ export const GAME_VERSIONS: { code: GameVersion; label: string }[] = [
   { code: 'retail', label: 'Retail' },
   { code: 'classic1x', label: 'Classic' },
 ];
-
-export const REGIONS: Region[] = ['us', 'eu', 'kr', 'tw'];
-
-// ---------------------------------------------------------------- board read
 
 export type BoardTask = {
   taskKey: string;
@@ -42,7 +38,7 @@ export type BoardCharacter = {
   realmSlug: string;
   groupName: string | null;
   priority: number;
-  weekKey: string;
+  weekId: string;
   snapshot: {
     capturedAt: Date;
     ilvl: number | null;
@@ -85,19 +81,19 @@ export async function getBoard(version: GameVersion): Promise<{
 
   const board: BoardCharacter[] = await Promise.all(
     characters.map(async (c) => {
-      const weekKey = weekKeyFor(c.region, now);
+      const weekId = currentWeekId(c.region, now);
       const completions = await prisma.taskCompletion.findMany({
         where: {
           characterId: c.id,
-          OR: [{ weekKey }, { weekKey: null }],
+          OR: [{ weekId }, { weekId: null }],
         },
       });
 
       const latest = c.snapshots[0] ?? null;
       const derived = deriveTasks(
-        latest ? { weekKey: latest.weekKey, payload: latest.payload } : null,
+        latest ? { weekId: latest.weekId, payload: latest.payload } : null,
         catalogTasks,
-        weekKey,
+        weekId,
         c.region,
         now,
       );
@@ -117,7 +113,7 @@ export async function getBoard(version: GameVersion): Promise<{
         realmSlug: c.realmSlug,
         groupName: c.groupName,
         priority: c.priority,
-        weekKey,
+        weekId,
         snapshot: latest
           ? {
               capturedAt: latest.capturedAt,
@@ -147,19 +143,17 @@ export async function getBoard(version: GameVersion): Promise<{
   return { version, characters: board };
 }
 
-// ---------------------------------------------------------------- mutations
-
 export async function toggleTaskCompletion(
   characterId: string,
   taskKey: string,
-  weekKey: string | null,
+  weekId: string | null,
   on: boolean,
 ): Promise<void> {
   if (on) {
-    // weekKey can be null (one_time tasks) so the compound-unique selector
-    // can't be used — find first, then update or create.
+    // weekId can be null (one_time tasks) so the compound-unique selector
+    // can't be used - find first, then update or create.
     const existing = await prisma.taskCompletion.findFirst({
-      where: { characterId, taskKey, weekKey },
+      where: { characterId, taskKey, weekId },
     });
     if (existing) {
       await prisma.taskCompletion.update({
@@ -168,13 +162,13 @@ export async function toggleTaskCompletion(
       });
     } else {
       await prisma.taskCompletion.create({
-        data: { characterId, taskKey, weekKey, done: true },
+        data: { characterId, taskKey, weekId, done: true },
       });
     }
   } else {
-    // Toggle off deletes the row — state falls back to derived.
+    // Toggle off deletes the row - state falls back to derived.
     await prisma.taskCompletion.deleteMany({
-      where: { characterId, taskKey, weekKey },
+      where: { characterId, taskKey, weekId },
     });
   }
 }
@@ -184,11 +178,8 @@ export type RefreshResult = {
   error?: string;
 };
 
-/**
- * Fetch fresh data for a character via its adapter and upsert the week's
- * snapshot. `bypassCache` (manual refresh button) skips the API cache read.
- * One bad character never throws into the caller's lap — errors are returned.
- */
+// Fetch fresh data via the character's adapter and upsert the week's snapshot.
+// One bad character never throws into the caller's lap - errors are returned.
 export async function refreshCharacter(
   characterId: string,
   opts: { bypassCache?: boolean; now?: Date } = {},
@@ -206,7 +197,7 @@ export async function refreshCharacter(
       nameLower: character.nameLower,
     });
 
-    const weekKey = weekKeyFor(character.region, now);
+    const weekId = currentWeekId(character.region, now);
     await prisma.$transaction([
       prisma.character.update({
         where: { id: characterId },
@@ -222,7 +213,7 @@ export async function refreshCharacter(
       }),
       prisma.characterSnapshot.upsert({
         where: {
-          characterId_weekKey: { characterId, weekKey },
+          characterId_weekId: { characterId, weekId },
         },
         update: {
           capturedAt: now,
@@ -233,7 +224,7 @@ export async function refreshCharacter(
         },
         create: {
           characterId,
-          weekKey,
+          weekId,
           capturedAt: now,
           payload: data.payload as object,
           ilvl: data.summary.ilvl,
@@ -253,10 +244,8 @@ export async function refreshCharacter(
   }
 }
 
-// ---------------------------------------------------------------- history
-
 export type HistoryEntry = {
-  weekKey: string;
+  weekId: string;
   capturedAt: Date;
   ilvl: number | null;
   mplusRating: number | null;
@@ -275,7 +264,7 @@ export async function getCharacterHistory(characterId: string): Promise<{
   const character = await prisma.character.findUnique({
     where: { id: characterId },
     include: {
-      snapshots: { orderBy: [{ weekKey: 'desc' }, { capturedAt: 'desc' }] },
+      snapshots: { orderBy: [{ weekId: 'desc' }, { capturedAt: 'desc' }] },
     },
   });
   if (!character) return null;
@@ -283,16 +272,16 @@ export async function getCharacterHistory(characterId: string): Promise<{
   // One entry per week (the latest snapshot of that week).
   const byWeek = new Map<string, (typeof character.snapshots)[number]>();
   for (const snap of character.snapshots) {
-    if (!byWeek.has(snap.weekKey)) byWeek.set(snap.weekKey, snap);
+    if (!byWeek.has(snap.weekId)) byWeek.set(snap.weekId, snap);
   }
-  const weeks = [...byWeek.values()].sort((a, b) => (a.weekKey < b.weekKey ? 1 : -1));
+  const weeks = [...byWeek.values()].sort((a, b) => (a.weekId < b.weekId ? 1 : -1));
 
   const history: HistoryEntry[] = weeks.map((snap, i) => {
     const prev = weeks[i + 1];
     const diff = (a: number | null, b: number | null) =>
       a === null || b === null ? null : a - b;
     return {
-      weekKey: snap.weekKey,
+      weekId: snap.weekId,
       capturedAt: snap.capturedAt,
       ilvl: snap.ilvl,
       mplusRating: snap.mplusRating,
@@ -317,6 +306,3 @@ export async function getCharacterHistory(characterId: string): Promise<{
     history,
   };
 }
-
-// Re-exported for API routes.
-export { fromWeekKey, isNextWeek };

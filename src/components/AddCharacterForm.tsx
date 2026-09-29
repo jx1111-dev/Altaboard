@@ -78,7 +78,7 @@ export default function AddCharacterForm({ defaultVersion, defaultRegion }: Prop
         setTimeout(() => window.location.reload(), 800);
       }
     } catch {
-      setError('add failed — network error');
+      setError('add failed - network error');
     } finally {
       setSubmitting(false);
     }

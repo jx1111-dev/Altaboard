@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/prisma';
 import { toggleTaskCompletion } from '@/lib/board';
-import { DEFAULT_SCHEDULES, weekKeyFor } from '@/lib/week';
+import { DEFAULT_SCHEDULES, currentWeekId } from '@/lib/week';
 
 export const dynamic = 'force-dynamic';
 
 type ToggleBody = {
   characterId?: string;
   taskKey?: string;
-  /** Omit for one_time tasks — resolved per character region for weekly tasks. */
-  weekKey?: string | null;
+  weekId?: string | null; // omit for one_time tasks; resolved per region for weekly tasks
   on?: boolean;
 };
 
-/**
- * Toggle a manual check. Toggle on → upsert row; toggle off → delete row
- * (state falls back to derived). Auto tasks are never persisted.
- */
+// Toggle a manual check: on upserts the row, off deletes it (state falls back
+// to derived). Auto tasks are never persisted.
 export async function POST(req: NextRequest) {
   let body: ToggleBody;
   try {
@@ -42,15 +39,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unknown task' }, { status: 400 });
   }
 
-  let weekKey: string | null;
+  let weekId: string | null;
   if (task.scope === 'one_time') {
-    weekKey = null;
-  } else if (body.weekKey) {
-    weekKey = body.weekKey;
+    weekId = null;
+  } else if (body.weekId) {
+    weekId = body.weekId;
   } else {
-    weekKey = weekKeyFor(character.region, new Date(), DEFAULT_SCHEDULES);
+    weekId = currentWeekId(character.region, new Date(), DEFAULT_SCHEDULES);
   }
 
-  await toggleTaskCompletion(characterId, taskKey, weekKey, body.on !== false);
-  return NextResponse.json({ ok: true, taskKey, weekKey, on: body.on !== false });
+  await toggleTaskCompletion(characterId, taskKey, weekId, body.on !== false);
+  return NextResponse.json({ ok: true, taskKey, weekId, on: body.on !== false });
 }

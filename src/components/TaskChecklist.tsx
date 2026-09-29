@@ -8,25 +8,23 @@ type Props = {
   tasks: BoardTask[];
 };
 
-/**
- * Task checklist on the character card.
- * - auto tasks: ✓ derived-done, ✗/blank derived-not-done, "?" unknown
- * - manual tasks: unchecked box (⧄) until toggled
- * - toggle on → persist manual row; toggle off → delete row (falls back to
- *   derived state)
- */
+// Task checklist on the character card. Legend:
+// auto tasks: derived-done shows a checkmark, derived-not-done a blank box,
+// unknown a "?" - manual tasks show a dashed unchecked box until toggled.
+// Toggle on persists a manual row, toggle off deletes it (falls back to
+// derived state).
 export default function TaskChecklist({ characterId, tasks }: Props) {
   const [, startTransition] = useTransition();
-  const [local, setLocal] = useState<Record<string, boolean>>({});
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
 
   async function toggle(task: BoardTask) {
-    const isManualSet = task.manuallySet || task.taskKey in local;
+    const isManualSet = task.manuallySet || task.taskKey in overrides;
     const currentlyOn = isManualSet
-      ? (local[task.taskKey] ?? task.state === 'done')
+      ? (overrides[task.taskKey] ?? task.state === 'done')
       : false;
     const nextOn = !currentlyOn;
 
-    setLocal((prev) => ({ ...prev, [task.taskKey]: nextOn }));
+    setOverrides((prev) => ({ ...prev, [task.taskKey]: nextOn }));
 
     startTransition(() => {
       fetch('/api/task-completions', {
@@ -38,7 +36,7 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
         })
         .catch(() => {
-          setLocal((prev) => {
+          setOverrides((prev) => {
             const copy = { ...prev };
             delete copy[task.taskKey];
             return copy;
@@ -48,8 +46,8 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
   }
 
   function visualState(task: BoardTask): 'done' | 'not_done' | 'unknown' | 'manual_unset' {
-    if (task.taskKey in local) {
-      return local[task.taskKey] ? 'done' : task.source === 'manual' ? 'manual_unset' : 'not_done';
+    if (task.taskKey in overrides) {
+      return overrides[task.taskKey] ? 'done' : task.source === 'manual' ? 'manual_unset' : 'not_done';
     }
     if (task.manuallySet) return task.state === 'done' ? 'done' : 'not_done';
     if (task.source === 'manual') return 'manual_unset';

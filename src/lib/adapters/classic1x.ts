@@ -1,7 +1,6 @@
-// Classic Era adapter (classic1x): the classic profile namespace exposes the
-// character summary and equipment. Achievements/statistics and keystone data
-// are not available for classic1x — thin API data degrades to manual checks
-// by design.
+// Classic Era adapter (classic1x): only the character summary and equipment
+// are exposed. Achievements/statistics and keystone data are not available,
+// so classic boards are mostly manual checks by design.
 
 import { blizzardGet } from '@/lib/blizzard/client';
 import type {
@@ -56,8 +55,8 @@ export const classic1xAdapter: CharacterAdapter = {
             },
           )) as Record<string, unknown>;
         } catch (err) {
-          // Classic endpoints intermittently 403 (data unavailable) — record
-          // and continue; only the profile is load-bearing.
+          // Classic endpoints intermittently 403 (data unavailable); only the
+          // profile is load-bearing.
           endpointErrors[spec.payloadKey] = describeError(err);
         }
       }),

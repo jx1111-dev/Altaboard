@@ -1,8 +1,8 @@
-// Retail adapter: profile summary, equipment, media, achievements, statistics,
-// mythic-keystone-profile. Merged into one snapshot payload.
+// Retail adapter: profile summary, equipment, media, achievements, statistics
+// and mythic-keystone-profile, merged into one snapshot payload.
 
 import { blizzardGet } from '@/lib/blizzard/client';
-import type { BlizzardError } from '@/lib/blizzard/errors';
+import { BlizzardError } from '@/lib/blizzard/errors';
 import type {
   CharacterAdapter,
   CharacterRef,
@@ -96,7 +96,7 @@ export const retailAdapter: CharacterAdapter = {
         spec: profile.active_spec?.name ?? null,
         level: profile.level ?? null,
         guildName: profile.guild?.name ?? null,
-        ilvl: parseIlvl(profile.average_item_level),
+        ilvl: typeof profile.average_item_level === 'number' ? profile.average_item_level : null,
         mplusRating: extractMplusRating(payload.mythicKeystoneProfile as MplusProfile | undefined),
         achievementPoints: profile.achievement_points ?? null,
         portraitUrl: portrait,
@@ -105,14 +105,10 @@ export const retailAdapter: CharacterAdapter = {
   },
 };
 
-function parseIlvl(v: unknown): number | null {
-  return typeof v === 'number' ? v : null;
-}
-
 function extractMplusRating(profile: MplusProfile | undefined): number | null {
   const rating = (profile?.season as { ratings?: { rating?: number }[] } | undefined)?.ratings;
   if (Array.isArray(rating)) {
-    // Season ratings array — take the current (last) season rating.
+    // take the current (last) season rating
     const current = rating[rating.length - 1];
     if (typeof current?.rating === 'number') return current.rating;
   }
@@ -120,7 +116,6 @@ function extractMplusRating(profile: MplusProfile | undefined): number | null {
 }
 
 export function describeError(err: unknown): string {
-  const be = err as BlizzardError;
-  if (be?.status) return `${be.status}: ${be.endpoint ?? ''}`.trim();
+  if (err instanceof BlizzardError) return `${err.status}: ${err.endpoint ?? ''}`.trim();
   return err instanceof Error ? err.message : String(err);
 }

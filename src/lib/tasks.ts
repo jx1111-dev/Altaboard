@@ -1,13 +1,8 @@
-// Task engine — pure derivation, no I/O. Vitest-tested (tests/tasks.test.ts).
-//
-// Semantics:
-// - deriveTasks reads a character's snapshot + the task catalog and produces the
-//   derived state for every catalog task: 'done' | 'not_done' | 'unknown'.
-// - 'unknown' is first-class: ambiguous or missing API data must surface as
-//   "unknown — confirm manually", never as a wrong ✓/✗.
-// - Only user toggles write task_completions. Merge precedence (manual row >
-//   derived > unknown) is applied in lib/board, not here.
-// - Auto tasks are never persisted from derivation.
+// Task engine - pure derivation, no I/O. Vitest-tested (tests/tasks.test.ts).
+// 'unknown' is first-class: ambiguous or missing API data must surface as
+// unknown, never as a wrong yes/no. Only user toggles write task_completions;
+// merge precedence (manual row > derived > unknown) lives in lib/board.
+import { formatWeekId } from '@/lib/week';
 
 export type TaskState = 'done' | 'not_done' | 'unknown';
 
@@ -21,13 +16,11 @@ export type CatalogTask = {
 };
 
 export type SnapshotLike = {
-  weekKey: string;
+  weekId: string;
   payload: unknown;
 } | null;
 
 export type DerivedTask = CatalogTask & { state: TaskState };
-
-// ---------------------------------------------------------------- payload types
 
 type MplusRun = {
   completed?: boolean;
@@ -49,14 +42,8 @@ type SnapshotPayload = {
   [key: string]: unknown;
 };
 
-// Great Vault M+ thresholds (retail): slots unlock at 1, 4 and 8 completed
-// dungeons per week.
-export const MPLUS_VAULT_THRESHOLDS = [1, 4, 8] as const;
-
-// ---------------------------------------------------------------- derivation
-
 type DerivationCtx = {
-  weekKey: string;
+  weekId: string;
   region: string;
   now: Date;
 };
@@ -64,20 +51,16 @@ type DerivationCtx = {
 type DerivationFn = (payload: SnapshotPayload, ctx: DerivationCtx) => TaskState;
 
 const derivations: Record<string, DerivationFn> = {
-  // Great Vault M+ slots — count distinct dungeons with a completed (timed) run
-  // in the keystone profile's current period, aligned to the character's region
-  // reset week.
+  // Great Vault M+ slots: count distinct dungeons with a completed (timed) run
+  // in the keystone profile's current period, aligned to the region reset week.
   mplus_runs_1: mplusVault(1),
   mplus_runs_4: mplusVault(4),
   mplus_runs_8: mplusVault(8),
 
-  // Raid vault row: raid bosses defeated this week. Achievement/statistics
-  // timestamps cannot conclusively separate "this reset week" from earlier
-  // activity, so unless a verified field lands here the state stays unknown.
+  // Achievement/statistics timestamps cannot conclusively separate this reset
+  // week from earlier activity, so these stay unknown until a verified field
+  // exists.
   raid_vault: () => 'unknown',
-
-  // World content vault row: world quests / events this week — same situation
-  // as raid_vault.
   world_vault: () => 'unknown',
 };
 
@@ -86,9 +69,8 @@ function mplusVault(threshold: number): DerivationFn {
     const currentPeriod = payload.mythicKeystoneProfile?.current_period;
     if (!currentPeriod) return 'unknown';
 
-    // Period alignment: the current period must cover the character's reset
-    // week, otherwise the data belongs to another week → unknown, never a
-    // wrong ✓/✗.
+    // The current period must cover the character's reset week, otherwise the
+    // data belongs to another week -> unknown.
     if (
       typeof currentPeriod.period_start_timestamp === 'number' &&
       typeof currentPeriod.period_end_timestamp === 'number'
@@ -98,8 +80,8 @@ function mplusVault(threshold: number): DerivationFn {
       const coversWeek =
         start.getTime() <= ctx.now.getTime() &&
         ctx.now.getTime() < end.getTime() &&
-        ctx.weekKey >= periodToWeekKey(start) &&
-        ctx.weekKey <= periodToWeekKey(new Date(end.getTime() - 1));
+        ctx.weekId >= formatWeekId(start) &&
+        ctx.weekId <= formatWeekId(new Date(end.getTime() - 1));
       if (!coversWeek) return 'unknown';
     }
 
@@ -107,8 +89,7 @@ function mplusVault(threshold: number): DerivationFn {
     if (!runs) return 'unknown';
 
     // best_runs is known to come back empty from the API even with completed
-    // runs — we deliberately count `runs` and treat an empty runs list as a
-    // real "no dungeons this week" (not_done), never as "0 keys" from best_runs.
+    // runs, so we count `runs` and treat an empty list as a real 0 (not_done).
     const completedDungeons = new Set<string>();
     for (const run of runs) {
       if (run.completed) {
@@ -121,61 +102,40 @@ function mplusVault(threshold: number): DerivationFn {
   };
 }
 
-function periodToWeekKey(d: Date): string {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-// ---------------------------------------------------------------- public API
-
-/**
- * Derive task state for every active catalog task against a snapshot.
- *
- * @param snapshot  null when the character has no snapshot yet — all auto tasks
- *                  come back 'unknown', manual tasks as 'unknown'.
- * @param catalog   active catalog tasks for the game version, in sort order.
- * @param weekKey   the current reset week for the character's region.
- * @param region    the character's region (drives period alignment).
- * @param now       injectable clock for tests.
- */
 export function deriveTasks(
   snapshot: SnapshotLike,
   catalog: CatalogTask[],
-  weekKey: string,
+  weekId: string,
   region: string,
   now: Date = new Date(),
 ): DerivedTask[] {
-  const ctx: DerivationCtx = { weekKey, region, now };
+  const ctx: DerivationCtx = { weekId, region, now };
   const payload = (snapshot?.payload ?? {}) as SnapshotPayload;
-  const snapshotWeek = snapshot?.weekKey ?? null;
+  const snapshotWeek = snapshot?.weekId ?? null;
 
   return catalog.map((task) => {
-    const base: DerivedTask = { ...task, state: 'unknown' };
+    const unknownTask: DerivedTask = { ...task, state: 'unknown' };
 
     if (task.source === 'manual') {
-      // Manual tasks carry no derived signal — they render as an unchecked box
-      // until the user toggles them.
-      return base;
+      // Manual tasks carry no derived signal.
+      return unknownTask;
     }
 
-    if (!snapshot || snapshotWeek !== weekKey) {
-      // No snapshot for the current week: nothing to derive from yet.
-      return base;
+    if (!snapshot || snapshotWeek !== weekId) {
+      return unknownTask;
     }
 
     const derivationKey = task.source.startsWith('auto:') ? task.source.slice(5) : null;
-    if (!derivationKey) return base;
+    if (!derivationKey) return unknownTask;
 
     const derive = derivations[derivationKey];
-    if (!derive) return base;
+    if (!derive) return unknownTask;
 
     try {
-      return { ...base, state: derive(payload, ctx) };
+      return { ...unknownTask, state: derive(payload, ctx) };
     } catch {
-      // A malformed payload must never crash the board — degrade to unknown.
-      return base;
+      // A malformed payload must never crash the board - degrade to unknown.
+      return unknownTask;
     }
   });
 }
@@ -185,10 +145,7 @@ export type ManualCompletionRow = {
   done: boolean;
 };
 
-/**
- * Merge manual completion rows over derived state:
- * manual row > derived state > unknown.
- */
+// manual row > derived state > unknown
 export function mergeTasks(
   derived: DerivedTask[],
   manualRows: ManualCompletionRow[],

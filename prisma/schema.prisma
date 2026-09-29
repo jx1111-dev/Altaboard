@@ -1,8 +1,5 @@
-// Altaboard data model.
-//
-// Known limitations (by design, see README):
-// - Rename / realm transfer creates a new character row; history is not migrated.
-// - Equipment is stored in snapshots from day one but not displayed on the MVP board.
+// Altaboard data model. Known limitations (by design, see README):
+// rename/realm transfer creates a new character row, history is not migrated.
 
 generator client {
   provider = "prisma-client-js"
@@ -16,7 +13,7 @@ datasource db {
 model GameVersion {
   code             String   @id // 'retail' | 'classic1x'
   label            String
-  namespacePrefix  String // 'profile' etc. — adapters append -{region}
+  namespacePrefix  String // 'profile' etc, adapters append -{region}
   active           Boolean  @default(true)
 }
 
@@ -53,7 +50,7 @@ model Character {
 model CharacterSnapshot {
   id          String   @id @default(cuid())
   characterId String
-  weekKey     String // e.g. '2026-09-23' — the reset week this snapshot belongs to
+  weekId      String // e.g. '2026-09-23', the reset week this snapshot belongs to
   capturedAt  DateTime @default(now())
   payload     Json // merged raw profile/equipment data
   ilvl        Float?
@@ -62,7 +59,7 @@ model CharacterSnapshot {
 
   character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
 
-  @@unique([characterId, weekKey])
+  @@unique([characterId, weekId])
   @@index([characterId, capturedAt])
 }
 
@@ -86,15 +83,15 @@ model TaskCompletion {
   id          String   @id @default(cuid())
   characterId String
   taskKey     String
-  weekKey     String? // null ⇒ one_time task
+  weekId      String? // null = one_time task
   done        Boolean  @default(true)
   updatedAt   DateTime @updatedAt
 
   character Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
   task      TaskCatalog @relation(fields: [taskKey], references: [id])
 
-  @@unique([characterId, taskKey, weekKey])
-  @@index([characterId, weekKey])
+  @@unique([characterId, taskKey, weekId])
+  @@index([characterId, weekId])
 }
 
 model ApiCache {

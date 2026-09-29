@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveTasks,
   mergeTasks,
-  MPLUS_VAULT_THRESHOLDS,
   type CatalogTask,
   type SnapshotLike,
 } from '@/lib/tasks';
@@ -45,7 +44,7 @@ function byKey(tasks: ReturnType<typeof run>) {
   return Object.fromEntries(tasks.map((t) => [t.taskKey, t.state]));
 }
 
-describe('deriveTasks — no snapshot / mismatched week', () => {
+describe('deriveTasks - no snapshot / mismatched week', () => {
   it('returns unknown for everything when there is no snapshot', () => {
     const states = byKey(run(null));
     expect(states).toEqual({
@@ -58,12 +57,12 @@ describe('deriveTasks — no snapshot / mismatched week', () => {
   });
 
   it('returns unknown when the snapshot belongs to a previous week', () => {
-    const snapshot = { weekKey: '2026-09-16', payload: makePeriod({ runs: [] }) };
+    const snapshot = { weekId: '2026-09-16', payload: makePeriod({ runs: [] }) };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('unknown');
   });
 });
 
-describe('deriveTasks — M+ vault thresholds', () => {
+describe('deriveTasks - M+ vault thresholds', () => {
   const START = Date.parse('2026-09-23T07:00:00Z');
   const END = Date.parse('2026-09-30T07:00:00Z');
 
@@ -72,7 +71,7 @@ describe('deriveTasks — M+ vault thresholds', () => {
       completed: true,
       dungeon: { slug: `dungeon-${i}` },
     }));
-    return { weekKey: WEEK, payload: makePeriod({ runs, startTimestamp: START, endTimestamp: END }) };
+    return { weekId: WEEK, payload: makePeriod({ runs, startTimestamp: START, endTimestamp: END }) };
   }
 
   it('0 completed dungeons → all not_done (a real 0, not unknown)', () => {
@@ -108,7 +107,7 @@ describe('deriveTasks — M+ vault thresholds', () => {
       completed: true,
       dungeon: { slug: 'same-dungeon' },
     }));
-    const snapshot = { weekKey: WEEK, payload: makePeriod({ runs, startTimestamp: START, endTimestamp: END }) };
+    const snapshot = { weekId: WEEK, payload: makePeriod({ runs, startTimestamp: START, endTimestamp: END }) };
     expect(byKey(run(snapshot)).vault_mplus_4).toBe('not_done');
   });
 
@@ -118,20 +117,20 @@ describe('deriveTasks — M+ vault thresholds', () => {
       { completed: false, dungeon: { slug: 'b' } },
       { completed: true, dungeon: { slug: 'c' } },
     ];
-    const snapshot = { weekKey: WEEK, payload: makePeriod({ runs, startTimestamp: START, endTimestamp: END }) };
+    const snapshot = { weekId: WEEK, payload: makePeriod({ runs, startTimestamp: START, endTimestamp: END }) };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('done');
     expect(byKey(run(snapshot)).vault_mplus_4).toBe('not_done');
   });
 });
 
-describe('deriveTasks — period alignment and missing data', () => {
+describe('deriveTasks - period alignment and missing data', () => {
   it('missing current_period → unknown', () => {
-    const snapshot = { weekKey: WEEK, payload: { mythicKeystoneProfile: {} } };
+    const snapshot = { weekId: WEEK, payload: { mythicKeystoneProfile: {} } };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('unknown');
   });
 
   it('missing keystone profile entirely → unknown', () => {
-    const snapshot = { weekKey: WEEK, payload: {} };
+    const snapshot = { weekId: WEEK, payload: {} };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('unknown');
   });
 
@@ -142,7 +141,7 @@ describe('deriveTasks — period alignment and missing data', () => {
       startTimestamp: Date.parse('2026-09-09T07:00:00Z'),
       endTimestamp: Date.parse('2026-09-16T07:00:00Z'),
     });
-    const snapshot = { weekKey: WEEK, payload };
+    const snapshot = { weekId: WEEK, payload };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('unknown');
   });
 
@@ -152,7 +151,7 @@ describe('deriveTasks — period alignment and missing data', () => {
       startTimestamp: Date.parse('2026-09-23T07:00:00Z'),
       endTimestamp: Date.parse('2026-09-30T07:00:00Z'),
     });
-    const snapshot = { weekKey: WEEK, payload };
+    const snapshot = { weekId: WEEK, payload };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('done');
   });
 
@@ -162,19 +161,19 @@ describe('deriveTasks — period alignment and missing data', () => {
       startTimestamp: Date.parse('2026-09-30T07:00:00Z'),
       endTimestamp: Date.parse('2026-10-07T07:00:00Z'),
     });
-    const snapshot = { weekKey: WEEK, payload };
+    const snapshot = { weekId: WEEK, payload };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('unknown');
   });
 });
 
-describe('deriveTasks — manual and inconclusive tasks', () => {
+describe('deriveTasks - manual and inconclusive tasks', () => {
   it('manual tasks are always unknown (unchecked box until toggled)', () => {
     expect(byKey(run(null)).weekly_event).toBe('unknown');
   });
 
   it('raid vault stays unknown until a verified derivation exists', () => {
     const snapshot = {
-      weekKey: WEEK,
+      weekId: WEEK,
       payload: makePeriod({
         runs: [{ completed: true, dungeon: { slug: 'a' } }],
         startTimestamp: Date.parse('2026-09-23T07:00:00Z'),
@@ -185,12 +184,12 @@ describe('deriveTasks — manual and inconclusive tasks', () => {
   });
 
   it('a malformed payload degrades to unknown instead of throwing', () => {
-    const snapshot = { weekKey: WEEK, payload: { mythicKeystoneProfile: 'garbage' } };
+    const snapshot = { weekId: WEEK, payload: { mythicKeystoneProfile: 'garbage' } };
     expect(byKey(run(snapshot)).vault_mplus_1).toBe('unknown');
   });
 });
 
-describe('mergeTasks — precedence manual > derived > unknown', () => {
+describe('mergeTasks - precedence manual > derived > unknown', () => {
   const derived = [
     { taskKey: 'a', label: 'a', category: 'mplus', scope: 'weekly', source: 'auto:mplus_runs_1', sortOrder: 1, state: 'not_done' as const },
     { taskKey: 'b', label: 'b', category: 'other', scope: 'weekly', source: 'manual', sortOrder: 2, state: 'unknown' as const },
@@ -216,11 +215,5 @@ describe('mergeTasks — precedence manual > derived > unknown', () => {
     const merged = mergeTasks(derived, []);
     expect(merged.every((t) => !t.manuallySet)).toBe(true);
     expect(merged.find((t) => t.taskKey === 'a')!.state).toBe('not_done');
-  });
-});
-
-describe('vault thresholds constant', () => {
-  it('matches the Great Vault slots', () => {
-    expect([...MPLUS_VAULT_THRESHOLDS]).toEqual([1, 4, 8]);
   });
 });

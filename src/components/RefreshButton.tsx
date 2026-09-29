@@ -4,8 +4,7 @@ import { useState, useTransition } from 'react';
 
 type Props = {
   characterId: string | null;
-  /** When characterId is null, refresh every id in this list sequentially. */
-  characterIds?: string[];
+  characterIds?: string[]; // when characterId is null, refresh every id in this list
   label: string;
 };
 

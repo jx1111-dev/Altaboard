@@ -4,7 +4,7 @@ import { refreshCharacter } from '@/lib/board';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-/** Manual per-character refresh: cache-bypass, rate-limit-guarded. */
+// Manual per-character refresh: cache-bypass, rate-limit-guarded.
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

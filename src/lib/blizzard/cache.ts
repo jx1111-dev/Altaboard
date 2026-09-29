@@ -1,8 +1,5 @@
-// PostgreSQL-backed API cache (api_cache table) — shared by web + worker.
+// PostgreSQL-backed API cache (api_cache table), shared by web + worker.
 // TTL classes: profile 15 min, achievements 2 h, media/static 24 h.
-//
-// Redis upgrade path: swap the two exported functions for a Redis client keyed
-// the same way; api_cache table can then be dropped.
 
 import { prisma } from '@/server/prisma';
 
@@ -14,12 +11,8 @@ export const TTL_MS: Record<TtlClass, number> = {
   static: 24 * 60 * 60 * 1000,
 };
 
-export type CacheEntry = { payload: unknown };
-
-/**
- * Cache key format: v{version}:r{region}:{endpoint}:{hash(params)}
- * `endpoint` excludes the query string.
- */
+// Cache key format: v{version}:r{region}:{endpoint}:{hash(params)},
+// endpoint excludes the query string.
 export function cacheKey(
   gameVersion: string,
   region: string,
@@ -55,7 +48,7 @@ export async function putCached(key: string, payload: unknown, ttlMs: number): P
   });
 }
 
-/** Opportunistic cleanup — call from the worker tick. */
+// Opportunistic cleanup, called from the worker tick.
 export async function purgeExpiredCache(): Promise<number> {
   const res = await prisma.apiCache.deleteMany({
     where: { expiresAt: { lt: new Date() } },

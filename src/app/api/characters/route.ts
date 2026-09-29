@@ -15,10 +15,7 @@ type AddBody = {
   gameVersion?: string;
 };
 
-/**
- * Manual add — the onboarding path. Creates the character row and kicks off
- * the first fetch. Rename/transfer later creates a new row (known limitation).
- */
+// Manual add - the onboarding path; creates the row and runs the first fetch.
 export async function POST(req: NextRequest) {
   let body: AddBody;
   try {
