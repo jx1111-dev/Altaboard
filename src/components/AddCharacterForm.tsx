@@ -14,17 +14,21 @@ export default function AddCharacterForm({ defaultVersion, defaultRegion }: Prop
   const [region, setRegion] = useState(defaultRegion);
   const [name, setName] = useState('');
   const [realmSlug, setRealmSlug] = useState('');
-  const [realms, setRealms] = useState<Realm[]>([]);
+  // Realms are stored with the version:region key they were fetched for;
+  // "loading" is derived (current selection has no result yet).
+  const [realmsBy, setRealmsBy] = useState<{ key: string; realms: Realm[] } | null>(null);
   const [realmQuery, setRealmQuery] = useState('');
-  const [loadingRealms, setLoadingRealms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const realmsKey = `${version}:${region}`;
+  const realms = realmsBy?.key === realmsKey ? realmsBy.realms : [];
+  const loadingRealms = realmsBy?.key !== realmsKey;
+
   // Load realm list for autocomplete whenever version/region changes.
   useEffect(() => {
     let cancelled = false;
-    setLoadingRealms(true);
     fetch(`/api/realms?version=${version}&region=${region}`)
       .then(async (res) => {
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'realm fetch failed');
@@ -32,20 +36,20 @@ export default function AddCharacterForm({ defaultVersion, defaultRegion }: Prop
       })
       .then((data: { realms: Realm[] }) => {
         if (!cancelled) {
-          setRealms(data.realms);
+          setRealmsBy({ key: realmsKey, realms: data.realms });
           setError(null);
         }
       })
       .catch((err: Error) => {
-        if (!cancelled) setError(`Could not load realms: ${err.message}`);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRealms(false);
+        if (!cancelled) {
+          setRealmsBy({ key: realmsKey, realms: [] });
+          setError(`Could not load realms: ${err.message}`);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [version, region]);
+  }, [version, region, realmsKey]);
 
   const filtered = realms
     .filter((r) => r.name.toLowerCase().includes(realmQuery.toLowerCase()))

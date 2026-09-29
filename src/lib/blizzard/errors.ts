@@ -43,3 +43,9 @@ export class ServerError extends BlizzardError {
     this.name = 'ServerError';
   }
 }
+
+// Compact one-line label for logs / snapshot _endpointErrors.
+export function describeError(err: unknown): string {
+  if (err instanceof BlizzardError) return `${err.status}: ${err.endpoint ?? ''}`.trim();
+  return err instanceof Error ? err.message : String(err);
+}

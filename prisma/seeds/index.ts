@@ -1,29 +1,5 @@
 // Static seed data for Altaboard.
 
-export const gameVersions = [
-  {
-    code: 'retail',
-    label: 'Retail',
-    // Adapters build namespaces as `${prefix}-${region}` for profile/dynamic,
-    // and `static-${region}` for static game data.
-    namespacePrefix: 'profile',
-    active: true,
-  },
-  {
-    code: 'classic1x',
-    label: 'Classic Era / Anniversary / Forever',
-    namespacePrefix: 'profile-classic1x',
-    active: true,
-  },
-  {
-    // Progressive Classic (e.g. TBC classic) is a future row + adapter.
-    code: 'classic2x',
-    label: 'Classic Progressive (future)',
-    namespacePrefix: 'profile-classic2x',
-    active: false,
-  },
-];
-
 // Weekly reset times in UTC. All four regions are verified values and mirror
 // the week engine's DEFAULT_SCHEDULES (kept in lockstep by tests/schedules.test.ts).
 export const resetSchedules = [

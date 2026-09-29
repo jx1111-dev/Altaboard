@@ -2,7 +2,7 @@
 // and mythic-keystone-profile, merged into one snapshot payload.
 
 import { blizzardGet } from '@/lib/blizzard/client';
-import { BlizzardError } from '@/lib/blizzard/errors';
+import { describeError } from '@/lib/blizzard/errors';
 import type {
   CharacterAdapter,
   CharacterRef,
@@ -20,8 +20,14 @@ type ProfileSummary = {
   achievement_points?: number;
 };
 
+// equipped_items is an array of equipped items, each with its slot and ilvl.
+type EquippedItem = {
+  slot?: { type?: string };
+  item_level?: { display_value?: string };
+};
+
 type EquipmentPayload = {
-  equipped_items?: Record<string, { item_level?: { display_value?: string } }>;
+  equipped_items?: EquippedItem[];
 };
 
 type MediaPayload = {
@@ -113,9 +119,4 @@ function extractMplusRating(profile: MplusProfile | undefined): number | null {
     if (typeof current?.rating === 'number') return current.rating;
   }
   return null;
-}
-
-export function describeError(err: unknown): string {
-  if (err instanceof BlizzardError) return `${err.status}: ${err.endpoint ?? ''}`.trim();
-  return err instanceof Error ? err.message : String(err);
 }

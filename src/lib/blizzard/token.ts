@@ -2,7 +2,7 @@
 // there is no user login in Altaboard. Cached in api_cache with its real
 // expiry, minus a safety margin.
 
-import { getCached, putCached, cacheKey } from './cache';
+import { getCached, putCached } from './cache';
 import { AuthError } from './errors';
 
 const TOKEN_URL = 'https://oauth.battle.net/token';

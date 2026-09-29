@@ -61,7 +61,7 @@ export async function blizzardGet<T = unknown>(
   params: Record<string, string> = {},
   options: FetchOptions,
 ): Promise<T> {
-  const { version, region, namespaceKind, ttlClass = 'profile' } = options;
+  const { version, region, namespaceKind } = options;
   const key = cacheKey(version, region, endpoint, params);
 
   if (!options.bypassCache) {

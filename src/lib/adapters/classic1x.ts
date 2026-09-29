@@ -3,13 +3,13 @@
 // so classic boards are mostly manual checks by design.
 
 import { blizzardGet } from '@/lib/blizzard/client';
+import { describeError } from '@/lib/blizzard/errors';
 import type {
   CharacterAdapter,
   CharacterRef,
   EndpointSpec,
   FetchedCharacterData,
 } from './types';
-import { describeError } from './retail';
 
 type ClassicProfile = {
   name?: string;

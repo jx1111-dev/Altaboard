@@ -6,8 +6,9 @@ services:
       POSTGRES_PASSWORD: altaboard
       POSTGRES_DB: altaboard
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    # No-auth app: loopback only, see README "Known limitations".
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +35,7 @@ services:
     build: .
     command: npm run start
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
@@ -55,6 +56,8 @@ services:
   worker:
     build: .
     command: npm run worker
+    # A crashed worker must come back on its own - it is the only refresher.
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}

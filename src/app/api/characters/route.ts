@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isUniqueViolation } from '@/server/prisma';
 import { refreshCharacter } from '@/lib/board';
-import type { GameVersion, Region } from '@/lib/blizzard/client';
 
 export const dynamic = 'force-dynamic';
 

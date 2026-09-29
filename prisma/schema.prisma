@@ -1,5 +1,8 @@
 // Altaboard data model. Known limitations (by design, see README):
 // rename/realm transfer creates a new character row, history is not migrated.
+// Game versions and reset schedules live as code constants (GAME_VERSIONS in
+// lib/board, DEFAULT_SCHEDULES in lib/week) - the DB once had write-only
+// GameVersion/ResetSchedule tables for them, dropped as dead.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,19 +11,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-
-model GameVersion {
-  code             String   @id // 'retail' | 'classic1x'
-  label            String
-  namespacePrefix  String // 'profile' etc, adapters append -{region}
-  active           Boolean  @default(true)
-}
-
-model ResetSchedule {
-  region       String @id // 'us' | 'eu' | 'kr' | 'tw'
-  resetDow     Int // 0=Sunday .. 6=Saturday (UTC day of weekly reset)
-  resetHourUtc Int // hour of day (UTC) at which the reset lands
 }
 
 model Character {

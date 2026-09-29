@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { gameVersions, resetSchedules, taskCatalog, demoClassicCharacters } from './seeds';
+import { taskCatalog, demoClassicCharacters } from './seeds';
 import { mockAdapter } from '@/lib/adapters/mock';
 import { currentWeekId } from '@/lib/week';
 import type { GameVersion, Region } from '@/lib/blizzard/client';
@@ -7,22 +7,6 @@ import type { GameVersion, Region } from '@/lib/blizzard/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  for (const gv of gameVersions) {
-    await prisma.gameVersion.upsert({
-      where: { code: gv.code },
-      update: { label: gv.label, namespacePrefix: gv.namespacePrefix, active: gv.active },
-      create: gv,
-    });
-  }
-
-  for (const schedule of resetSchedules) {
-    await prisma.resetSchedule.upsert({
-      where: { region: schedule.region },
-      update: { resetDow: schedule.resetDow, resetHourUtc: schedule.resetHourUtc },
-      create: schedule,
-    });
-  }
-
   for (const task of taskCatalog) {
     await prisma.taskCatalog.upsert({
       where: { gameVersion_taskKey: { gameVersion: task.gameVersion, taskKey: task.taskKey } },
@@ -112,8 +96,6 @@ async function main() {
   }
 
   console.log('Seed complete:', {
-    gameVersions: gameVersions.length,
-    resetSchedules: resetSchedules.length,
     taskCatalog: taskCatalog.length,
     demoCharacters: process.env.MOCK_BLIZZARD === '1' ? demoCharacters : 0,
   });
