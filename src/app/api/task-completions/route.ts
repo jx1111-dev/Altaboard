@@ -6,12 +6,9 @@ import { isSameOrigin } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
-const WEEK_ID_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 type ToggleBody = {
   characterId?: string;
   taskKey?: string;
-  weekId?: string | null;
   on?: boolean;
 };
 
@@ -48,18 +45,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unknown task' }, { status: 400 });
   }
 
-  let weekId: string | null;
-  if (task.scope === 'one_time') {
-    weekId = null;
-  } else if (body.weekId) {
-    // Client-supplied weekIds are persisted verbatim.
-    if (!WEEK_ID_RE.test(body.weekId)) {
-      return NextResponse.json({ error: 'weekId must be YYYY-MM-DD' }, { status: 400 });
-    }
-    weekId = body.weekId;
-  } else {
-    weekId = currentWeekId(character.region, new Date(), DEFAULT_SCHEDULES);
-  }
+  // weekId is always derived server-side (null for one_time tasks): a
+  // client-supplied value could drift from the region's real week and create
+  // an orphan row the board never reads.
+  const weekId =
+    task.scope === 'one_time'
+      ? null
+      : currentWeekId(character.region, new Date(), DEFAULT_SCHEDULES);
 
   try {
     await toggleTaskCompletion(characterId, taskKey, weekId, body.on !== false);
