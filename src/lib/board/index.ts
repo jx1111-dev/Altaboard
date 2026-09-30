@@ -229,6 +229,13 @@ export type RefreshResult = {
   error?: string;
 };
 
+// Exponential backoff for transient fetch failures: 10 min doubled per
+// consecutive failure, capped at 24 h. The worker skips characters whose
+// nextAttemptAt is in the future, so a flapping character cannot burn quota
+// at tick cadence.
+const BACKOFF_BASE_MS = 10 * 60 * 1000;
+const BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
+
 // Fetch fresh data via the character's adapter and upsert the week's snapshot.
 // One bad character never throws into the caller's lap - errors are returned.
 export async function refreshCharacter(
@@ -260,6 +267,8 @@ export async function refreshCharacter(
           guildName: data.summary.guildName,
           lastFetchedAt: now,
           lastFetchError: null,
+          fetchFailures: 0,
+          nextAttemptAt: null,
         },
       }),
       prisma.characterSnapshot.upsert({
@@ -290,15 +299,26 @@ export async function refreshCharacter(
     // NotFound is permanent (character deleted or renamed away) - advancing
     // lastFetchedAt keeps the daily sweep from retrying a lost cause. Any
     // transient failure (rate limit, 5xx, network) leaves lastFetchedAt
-    // untouched so the next sweep retries the character.
+    // untouched and backs the next attempt off exponentially instead of
+    // retrying on every tick.
     const permanent = err instanceof NotFoundError;
-    await prisma.character.update({
-      where: { id: characterId },
-      data: {
-        lastFetchError: message,
-        ...(permanent ? { lastFetchedAt: now } : {}),
-      },
-    });
+    if (permanent) {
+      await prisma.character.update({
+        where: { id: characterId },
+        data: { lastFetchError: message, lastFetchedAt: now },
+      });
+    } else {
+      const fetchFailures = character.fetchFailures + 1;
+      const backoffMs = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** fetchFailures);
+      await prisma.character.update({
+        where: { id: characterId },
+        data: {
+          lastFetchError: message,
+          fetchFailures,
+          nextAttemptAt: new Date(now.getTime() + backoffMs),
+        },
+      });
+    }
     return { ok: false, error: message };
   }
 }

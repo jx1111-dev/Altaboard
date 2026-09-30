@@ -29,6 +29,10 @@ model Character {
   archived       Boolean   @default(false)
   lastFetchedAt  DateTime?
   lastFetchError String?
+  // Transient-failure backoff, advanced by refreshCharacter (exponential,
+  // see board/index.ts); the daily sweep skips characters not yet due.
+  fetchFailures  Int       @default(0)
+  nextAttemptAt  DateTime?
 
   snapshots    CharacterSnapshot[]
   completions  TaskCompletion[]

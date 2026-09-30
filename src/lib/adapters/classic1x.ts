@@ -3,7 +3,7 @@
 // so classic boards are mostly manual checks by design.
 
 import { blizzardGet } from '@/lib/blizzard/client';
-import { describeError } from '@/lib/blizzard/errors';
+import { describeError, NotFoundError } from '@/lib/blizzard/errors';
 import type {
   CharacterAdapter,
   CharacterRef,
@@ -39,6 +39,9 @@ export const classic1xAdapter: CharacterAdapter = {
 
   async fetchCharacter(ref: CharacterRef): Promise<FetchedCharacterData> {
     const endpointErrors: Record<string, string> = {};
+    // The caught error instances, kept beside their describeError strings so a
+    // typed class (NotFoundError) can be rethrown across the adapter boundary.
+    const endpointFailures: Record<string, unknown> = {};
     const payload: Record<string, unknown> = {};
 
     await Promise.all(
@@ -58,12 +61,16 @@ export const classic1xAdapter: CharacterAdapter = {
           // Classic endpoints intermittently 403 (data unavailable); only the
           // profile is load-bearing.
           endpointErrors[spec.payloadKey] = describeError(err);
+          endpointFailures[spec.payloadKey] = err;
         }
       }),
     );
 
     const profile = payload.profile as ClassicProfile | undefined;
     if (!profile) {
+      // A profile 404 is rethrown as-is so refreshCharacter can classify it as
+      // permanent instead of retrying the character at tick cadence forever.
+      if (endpointFailures.profile instanceof NotFoundError) throw endpointFailures.profile;
       throw new Error(Object.values(endpointErrors)[0] ?? 'profile fetch failed');
     }
 

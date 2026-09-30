@@ -2,7 +2,7 @@
 // and mythic-keystone-profile, merged into one snapshot payload.
 
 import { blizzardGet } from '@/lib/blizzard/client';
-import { describeError } from '@/lib/blizzard/errors';
+import { describeError, NotFoundError } from '@/lib/blizzard/errors';
 import type {
   CharacterAdapter,
   CharacterRef,
@@ -57,6 +57,9 @@ export const retailAdapter: CharacterAdapter = {
 
   async fetchCharacter(ref: CharacterRef): Promise<FetchedCharacterData> {
     const endpointErrors: Record<string, string> = {};
+    // The caught error instances, kept beside their describeError strings so a
+    // typed class (NotFoundError) can be rethrown across the adapter boundary.
+    const endpointFailures: Record<string, unknown> = {};
     const payload: Record<string, unknown> = {};
 
     await Promise.all(
@@ -74,13 +77,18 @@ export const retailAdapter: CharacterAdapter = {
           )) as Record<string, unknown>;
         } catch (err) {
           endpointErrors[spec.payloadKey] = describeError(err);
+          endpointFailures[spec.payloadKey] = err;
         }
       }),
     );
 
     const profile = payload.profile as ProfileSummary | undefined;
     if (!profile) {
-      // The core profile is the one thing we cannot do without.
+      // The core profile is the one thing we cannot do without. A profile 404
+      // is rethrown as-is so refreshCharacter can classify it as permanent; a
+      // generic Error would make that check unreachable and the character
+      // would be retried at tick cadence forever.
+      if (endpointFailures.profile instanceof NotFoundError) throw endpointFailures.profile;
       const firstError = Object.values(endpointErrors)[0] ?? 'profile fetch failed';
       throw new Error(firstError, { cause: { endpointErrors } });
     }

@@ -2,7 +2,8 @@
 // triggers (no TTL conflation):
 // - rollover sweep: a region's weekId changed since the last tick -> refresh
 //   all characters in that region (previous week's snapshot stands as history)
-// - daily sweep: characters whose lastFetchedAt is older than 24 h
+// - daily sweep: characters whose lastFetchedAt is older than 24 h, minus
+//   transient failures still inside their exponential backoff window
 // plus it purges expired cache rows and logs each sweep to job_runs.
 // Sweeps are rate-budgeted (shared token bucket); one bad character never
 // crashes the worker.
@@ -108,7 +109,10 @@ async function rolloverSweep(now: Date): Promise<string[]> {
   return changed;
 }
 
-// Refresh characters whose lastFetchedAt is older than 24 h (or never fetched).
+// Refresh characters whose lastFetchedAt is older than 24 h (or never
+// fetched), minus transient failures still inside their backoff window
+// (fetchFailures/nextAttemptAt, set by refreshCharacter) - a backed-off
+// character waits even while stale.
 async function dailySweep(now: Date): Promise<void> {
   const job = await prisma.jobRun.create({
     data: { type: 'daily_sweep', status: 'running' },
@@ -118,7 +122,10 @@ async function dailySweep(now: Date): Promise<void> {
   const stale = await prisma.character.findMany({
     where: {
       archived: false,
-      OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: cutoff } }],
+      AND: [
+        { OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: cutoff } }] },
+        { OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
+      ],
     },
     select: { id: true },
   });
