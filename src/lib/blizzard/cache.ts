@@ -11,8 +11,10 @@ export const TTL_MS: Record<TtlClass, number> = {
   static: 24 * 60 * 60 * 1000,
 };
 
-// Cache key format: v{version}:r{region}:{endpoint}:{hash(params)},
-// endpoint excludes the query string.
+// Cache key format: v{version}:r{region}:{endpoint}:{params}, endpoint
+// excludes the query string. The (short) params string is embedded verbatim;
+// hashing it would add a collision class (two param-sets serving each other's
+// cached payload) for no space saved.
 export function cacheKey(
   gameVersion: string,
   region: string,
@@ -23,13 +25,7 @@ export function cacheKey(
     .sort()
     .map((k) => `${k}=${params[k]}`)
     .join('&');
-  return `v${gameVersion}:r${region}:${endpoint}:${paramStr ? simpleHash(paramStr) : 'noparams'}`;
-}
-
-function simpleHash(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
+  return `v${gameVersion}:r${region}:${endpoint}:${paramStr || 'noparams'}`;
 }
 
 export async function getCached<T = unknown>(key: string): Promise<T | null> {

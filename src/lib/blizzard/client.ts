@@ -115,10 +115,16 @@ async function fetchWithAuth<T>(
   if (res.status === 404) throw new NotFoundError(url);
 
   if (res.status === 429) {
-    // One jittered retry - the token bucket may already cover the burst.
+    // One retry - honoring Retry-After when Blizzard sends a numeric one,
+    // else a jittered delay (the token bucket may already cover the burst).
     // A second 429 surfaces as RateLimitError to the caller.
     if (attempt < 1) {
-      await sleep(jitteredDelay(attempt));
+      const retryAfterSec = Number(res.headers.get('retry-after'));
+      const delay =
+        Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? retryAfterSec * 1000
+          : jitteredDelay(attempt);
+      await sleep(delay);
       return fetchWithAuth<T>(url, query, key, options, attempt + 1);
     }
     throw new RateLimitError(url);
