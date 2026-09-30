@@ -54,7 +54,10 @@ npm run lint       # eslint (flat config, next/core-web-vitals)
   classic endpoints are omitted; the task engine degrades gracefully.
 - **`lib/week`** — reset engine, pure + vitest-tested. `weekId(region)` = UTC
   date of the most recent reset (US Tue 15:00, EU Wed 07:00, KR/TW Thu 23:00
-  UTC).
+  UTC). `npx tsx scripts/verify-reset-times.ts` checks those constants
+  against the live M+ period index per region (one-time run; needs Blizzard
+  credentials and a reachable database); change the constants only on that
+  evidence.
 - **`lib/tasks`** — `deriveTasks`, pure + vitest-tested. Read-time derivation;
   only user toggles write `task_completions`. `unknown` is a first-class state:
   ambiguous or missing API data is surfaced as "unknown — confirm manually",
