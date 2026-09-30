@@ -16,3 +16,9 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 export function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
 }
+
+// Record-not-found on write (P2025) - the honest-404 paths; everything else
+// must surface as a real 5xx instead of masquerading as a missing row.
+export function isNotFoundViolation(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025';
+}

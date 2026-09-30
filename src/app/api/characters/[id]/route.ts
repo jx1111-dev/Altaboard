@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/server/prisma';
+import { prisma, isNotFoundViolation } from '@/server/prisma';
 import { isSameOrigin } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
@@ -45,8 +45,13 @@ export async function PATCH(
   try {
     const character = await prisma.character.update({ where: { id }, data });
     return NextResponse.json({ character });
-  } catch {
-    return NextResponse.json({ error: 'character not found' }, { status: 404 });
+  } catch (err) {
+    // Only a genuine record-not-found is a 404; anything else (DB down,
+    // schema drift) must surface as a real 5xx, not masquerade as a bad id.
+    if (isNotFoundViolation(err)) {
+      return NextResponse.json({ error: 'character not found' }, { status: 404 });
+    }
+    throw err;
   }
 }
 
@@ -61,7 +66,11 @@ export async function DELETE(
   try {
     await prisma.character.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'character not found' }, { status: 404 });
+  } catch (err) {
+    // Same distinction as PATCH: 404 only for a genuine record-not-found.
+    if (isNotFoundViolation(err)) {
+      return NextResponse.json({ error: 'character not found' }, { status: 404 });
+    }
+    throw err;
   }
 }
