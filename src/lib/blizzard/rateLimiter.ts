@@ -17,7 +17,10 @@ function bucket(): Bucket {
   return globalBucket.bucket;
 }
 
-// Milliseconds to wait before a request may fire (0 = immediately).
+// Milliseconds to wait before a request may fire (0 = immediately). The token
+// is reserved before computing the delay and the balance may go negative:
+// every concurrent caller owns a definite future token, so K sleepers wake
+// one refill apart instead of all firing together on the same refill.
 function delayForRequest(): number {
   const b = bucket();
   const now = Date.now();
@@ -25,14 +28,9 @@ function delayForRequest(): number {
   b.tokens = Math.min(BURST_CAPACITY, b.tokens + elapsed * REFILL_PER_SECOND);
   b.lastRefillMs = now;
 
-  if (b.tokens >= 1) {
-    b.tokens -= 1;
-    return 0;
-  }
-
-  const deficit = 1 - b.tokens;
-  b.tokens = 0;
-  return Math.ceil((deficit / REFILL_PER_SECOND) * 1000);
+  b.tokens -= 1;
+  if (b.tokens >= 0) return 0;
+  return Math.ceil((-b.tokens / REFILL_PER_SECOND) * 1000);
 }
 
 export async function acquireSlot(): Promise<void> {
