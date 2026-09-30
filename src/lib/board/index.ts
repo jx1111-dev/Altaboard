@@ -167,6 +167,42 @@ export async function getBoard(version: GameVersion): Promise<{
   return { version, characters: board };
 }
 
+// weekId can be null (one_time tasks) so the compound-unique selector can't
+// be used - find first, then update or create.
+async function upsertCompletion(
+  characterId: string,
+  taskKey: string,
+  weekId: string | null,
+  done: boolean,
+): Promise<void> {
+  const existing = await prisma.taskCompletion.findFirst({
+    where: { characterId, taskKey, weekId },
+  });
+  if (existing) {
+    await prisma.taskCompletion.update({
+      where: { id: existing.id },
+      data: { done },
+    });
+    return;
+  }
+  try {
+    await prisma.taskCompletion.create({
+      data: { characterId, taskKey, weekId, done },
+    });
+  } catch (err) {
+    // Lost the unique-index race to a concurrent toggle - the row now
+    // exists, so flip to an update of the winner's row.
+    if (!isUniqueViolation(err)) throw err;
+    const winner = await prisma.taskCompletion.findFirstOrThrow({
+      where: { characterId, taskKey, weekId },
+    });
+    await prisma.taskCompletion.update({
+      where: { id: winner.id },
+      data: { done },
+    });
+  }
+}
+
 export async function toggleTaskCompletion(
   characterId: string,
   taskKey: string,
@@ -174,39 +210,17 @@ export async function toggleTaskCompletion(
   on: boolean,
 ): Promise<void> {
   if (on) {
-    // weekId can be null (one_time tasks) so the compound-unique selector
-    // can't be used - find first, then update or create.
-    const existing = await prisma.taskCompletion.findFirst({
-      where: { characterId, taskKey, weekId },
-    });
-    if (existing) {
-      await prisma.taskCompletion.update({
-        where: { id: existing.id },
-        data: { done: true },
-      });
-      return;
-    }
-    try {
-      await prisma.taskCompletion.create({
-        data: { characterId, taskKey, weekId, done: true },
-      });
-    } catch (err) {
-      // Lost the unique-index race to a concurrent toggle - the row now
-      // exists, so flip to an update of the winner's row.
-      if (!isUniqueViolation(err)) throw err;
-      const winner = await prisma.taskCompletion.findFirstOrThrow({
-        where: { characterId, taskKey, weekId },
-      });
-      await prisma.taskCompletion.update({
-        where: { id: winner.id },
-        data: { done: true },
-      });
-    }
+    await upsertCompletion(characterId, taskKey, weekId, true);
   } else {
-    // Toggle off deletes the row - state falls back to derived.
-    await prisma.taskCompletion.deleteMany({
+    // Toggle off deletes the row so state falls back to derived. A derived-done
+    // checkmark has no row to delete, so persist an explicit not-done row
+    // instead - otherwise the correction could not survive a reload.
+    const deleted = await prisma.taskCompletion.deleteMany({
       where: { characterId, taskKey, weekId },
     });
+    if (deleted.count === 0) {
+      await upsertCompletion(characterId, taskKey, weekId, false);
+    }
   }
 }
 

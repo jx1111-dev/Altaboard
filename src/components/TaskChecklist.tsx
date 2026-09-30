@@ -14,16 +14,18 @@ type Props = {
 // Every row is clickable: toggle on persists a user override for ANY task
 // (auto rows included, e.g. to resolve an unknown or correct a wrong ✓),
 // toggle off deletes the override and falls back to the derived state.
+// Clearing a derived-done checkmark has no override to delete, so it
+// persists an explicit not-done row instead, keeping the correction on
+// reload.
 export default function TaskChecklist({ characterId, tasks }: Props) {
   const [, startTransition] = useTransition();
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function toggle(task: BoardTask) {
-    const isManualSet = task.manuallySet || task.taskKey in overrides;
-    const currentlyOn = isManualSet
-      ? (overrides[task.taskKey] ?? task.state === 'done')
-      : false;
+    // Compute from the effective displayed state, not just the override map:
+    // a derived-done checkmark must toggle off on the first click too.
+    const currentlyOn = overrides[task.taskKey] ?? task.state === 'done';
     const nextOn = !currentlyOn;
 
     setOverrides((prev) => ({ ...prev, [task.taskKey]: nextOn }));

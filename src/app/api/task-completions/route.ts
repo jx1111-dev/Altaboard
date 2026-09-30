@@ -15,8 +15,9 @@ type ToggleBody = {
 };
 
 // Toggle a task: on upserts the user's completion row, off deletes it (state
-// falls back to derived). Rows are user overrides on ANY catalog task, auto
-// tasks stay derived until overridden.
+// falls back to derived). Clearing a derived-done checkmark has no row to
+// delete, so it persists an explicit not-done row instead. Rows are user
+// overrides on ANY catalog task, auto tasks stay derived until overridden.
 export async function POST(req: NextRequest) {
   let body: ToggleBody;
   try {
