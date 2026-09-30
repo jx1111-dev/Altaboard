@@ -1,4 +1,4 @@
-// Task engine - pure derivation, no I/O. Vitest-tested (tests/tasks.test.ts).
+// Task engine, pure derivation, no I/O. Vitest-tested (tests/tasks.test.ts).
 // 'unknown' is first-class: ambiguous or missing API data must surface as
 // unknown, never as a wrong yes/no. Only user toggles write task_completions
 // (as overrides on any task); merge precedence (manual row > derived >
@@ -137,7 +137,7 @@ export function deriveTasks(
     try {
       return { ...unknownTask, state: derive(payload, ctx) };
     } catch {
-      // A malformed payload must never crash the board - degrade to unknown.
+      // A malformed payload must never crash the board, degrade to unknown.
       return unknownTask;
     }
   });

@@ -17,7 +17,7 @@ type AddBody = {
   gameVersion?: string;
 };
 
-// Manual add - the onboarding path; creates the row and runs the first fetch.
+// Onboarding path; creates the row and runs the first fetch.
 export async function POST(req: NextRequest) {
   let body: AddBody;
   try {

@@ -56,7 +56,7 @@ services:
   worker:
     build: .
     command: npm run worker
-    # A crashed worker must come back on its own - it is the only refresher.
+    # A crashed worker must come back on its own, it is the only refresher.
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard

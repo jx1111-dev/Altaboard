@@ -10,13 +10,13 @@ const WEEK_ID_RE = /^\d{4}-\d{2}-\d{2}$/;
 type ToggleBody = {
   characterId?: string;
   taskKey?: string;
-  weekId?: string | null; // omit for one_time tasks; resolved per region for weekly tasks
+  weekId?: string | null;
   on?: boolean;
 };
 
 // Toggle a task: on upserts the user's completion row, off deletes it (state
-// falls back to derived). Rows are user overrides on ANY catalog task - auto
-// tasks stay derived until overridden, manual tasks are always user-driven.
+// falls back to derived). Rows are user overrides on ANY catalog task, auto
+// tasks stay derived until overridden.
 export async function POST(req: NextRequest) {
   let body: ToggleBody;
   try {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   if (task.scope === 'one_time') {
     weekId = null;
   } else if (body.weekId) {
-    // Client-supplied weekIds are persisted verbatim; keep the format honest.
+    // Client-supplied weekIds are persisted verbatim.
     if (!WEEK_ID_RE.test(body.weekId)) {
       return NextResponse.json({ error: 'weekId must be YYYY-MM-DD' }, { status: 400 });
     }

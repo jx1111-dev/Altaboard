@@ -21,6 +21,11 @@ Single-user, no login.
    The `migrate` one-shot job applies migrations + seeds, then `web` serves
    http://localhost:3000 and `worker` runs the refresh loop.
 
+   > **After code changes, always include `--build`** (or run
+   > `docker compose build` first): a plain `docker compose up` reuses the
+   > previously built image and keeps serving the old code. Hard-refresh the
+   > browser (Ctrl+Shift+R) afterwards so an open tab drops the old build.
+
 ### Local development (without Docker)
 
 ```sh

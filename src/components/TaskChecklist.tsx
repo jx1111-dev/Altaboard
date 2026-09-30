@@ -10,9 +10,9 @@ type Props = {
 
 // Task checklist on the character card. Legend:
 // auto tasks: derived-done shows a checkmark, derived-not-done a blank box,
-// unknown a "?" - manual tasks show a dashed unchecked box until toggled.
+// unknown a "?", manual tasks show a dashed unchecked box until toggled.
 // Every row is clickable: toggle on persists a user override for ANY task
-// (auto rows included - e.g. to resolve an unknown or correct a wrong ✓),
+// (auto rows included, e.g. to resolve an unknown or correct a wrong ✓),
 // toggle off deletes the override and falls back to the derived state.
 export default function TaskChecklist({ characterId, tasks }: Props) {
   const [, startTransition] = useTransition();
@@ -46,7 +46,7 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
           }
         })
         .catch((err: Error) => {
-          // Revert the optimistic flip and say why - silent reverts read as
+          // Revert the optimistic flip and say why, silent reverts read as
           // "the click did nothing".
           setOverrides((prev) => {
             const copy = { ...prev };

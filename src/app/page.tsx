@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getBoard, GAME_VERSIONS, type BoardCharacter } from '@/lib/board';
 import AddCharacterForm from '@/components/AddCharacterForm';
 import TaskChecklist from '@/components/TaskChecklist';
@@ -13,6 +14,11 @@ type Props = {
 
 export default async function BoardPage({ searchParams }: Props) {
   const { version: versionParam } = await searchParams;
+  // Unknown ?version= (e.g. a stale bookmark with ?version=classic) must not
+  // silently render the retail board; that reads as a dead version toggle.
+  if (versionParam !== undefined && !GAME_VERSIONS.some((v) => v.code === versionParam)) {
+    redirect('/');
+  }
   const version = (GAME_VERSIONS.find((v) => v.code === versionParam)?.code ??
     'retail') as (typeof GAME_VERSIONS)[number]['code'];
 
