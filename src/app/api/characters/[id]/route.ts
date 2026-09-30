@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/prisma';
+import { isSameOrigin } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!isSameOrigin(req)) {
+    return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
+  }
   const { id } = await params;
   let body: PatchBody;
   try {
@@ -47,9 +51,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!isSameOrigin(req)) {
+    return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
+  }
   const { id } = await params;
   try {
     await prisma.character.delete({ where: { id } });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isUniqueViolation } from '@/server/prisma';
 import { refreshCharacter } from '@/lib/board';
+import { isSameOrigin } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,10 @@ type AddBody = {
 
 // Onboarding path; creates the row and runs the first fetch.
 export async function POST(req: NextRequest) {
+  if (!isSameOrigin(req)) {
+    return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
+  }
+
   let body: AddBody;
   try {
     body = (await req.json()) as AddBody;

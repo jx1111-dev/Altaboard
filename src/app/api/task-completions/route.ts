@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/prisma';
 import { toggleTaskCompletion } from '@/lib/board';
 import { DEFAULT_SCHEDULES, currentWeekId } from '@/lib/week';
+import { isSameOrigin } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +20,10 @@ type ToggleBody = {
 // delete, so it persists an explicit not-done row instead. Rows are user
 // overrides on ANY catalog task, auto tasks stay derived until overridden.
 export async function POST(req: NextRequest) {
+  if (!isSameOrigin(req)) {
+    return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
+  }
+
   let body: ToggleBody;
   try {
     body = (await req.json()) as ToggleBody;
