@@ -343,7 +343,19 @@ export async function getCharacterHistory(characterId: string): Promise<{
   const character = await prisma.character.findUnique({
     where: { id: characterId },
     include: {
-      snapshots: { orderBy: [{ weekId: 'desc' }, { capturedAt: 'desc' }] },
+      snapshots: {
+        orderBy: [{ weekId: 'desc' }, { capturedAt: 'desc' }],
+        // Only these scalars are rendered; skipping the payload JSON (the
+        // merged profile, hundreds of KB per snapshot) keeps the history page
+        // from shipping it for nothing.
+        select: {
+          weekId: true,
+          capturedAt: true,
+          ilvl: true,
+          mplusRating: true,
+          achievementPoints: true,
+        },
+      },
     },
   });
   if (!character) return null;
