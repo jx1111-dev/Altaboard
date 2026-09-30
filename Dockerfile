@@ -1,4 +1,5 @@
-# One image for web + worker + migrate job (next.config uses output: 'standalone').
+# One image for web + worker + migrate job: full `next start` with the complete
+# node_modules (tsx + prisma CLI live there), so no standalone/pruned build.
 FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app

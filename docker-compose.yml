@@ -34,6 +34,9 @@ services:
   web:
     build: .
     command: npm run start
+    # The worker already restarts itself; web must too - a crashed Next
+    # server otherwise stays down until manual intervention.
+    restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
     environment:

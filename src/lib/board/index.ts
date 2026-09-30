@@ -18,6 +18,15 @@ export const GAME_VERSIONS: { code: GameVersion; label: string }[] = [
   { code: 'classic1x', label: 'Classic' },
 ];
 
+const REGIONS = new Set(['us', 'eu', 'kr', 'tw']);
+
+// DEFAULT_REGION from the environment (us|eu|kr|tw, eu fallback); .env.example
+// documents the knob. Read at render time in Server Components.
+export function defaultRegion(): string {
+  const region = process.env.DEFAULT_REGION;
+  return region && REGIONS.has(region) ? region : 'eu';
+}
+
 export type BoardTask = {
   taskKey: string;
   label: string;

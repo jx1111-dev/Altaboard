@@ -1,8 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Blizzard media (character portraits) are served from specific CDNs;
-  // we proxy images through /api or use plain <img>, so no remotePatterns needed.
-  output: 'standalone',
+  // Portraits are plain <img> tags whose src comes straight from the
+  // payload's CDN URLs (no next/image), so no remotePatterns config applies.
 };
 
 export default nextConfig;

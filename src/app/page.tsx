@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getBoard, GAME_VERSIONS, type BoardCharacter } from '@/lib/board';
+import { getBoard, GAME_VERSIONS, defaultRegion, type BoardCharacter } from '@/lib/board';
 import AddCharacterForm from '@/components/AddCharacterForm';
 import TaskChecklist from '@/components/TaskChecklist';
 import RefreshButton from '@/components/RefreshButton';
@@ -36,7 +36,7 @@ export default async function BoardPage({ searchParams }: Props) {
         />
       </div>
 
-      <AddCharacterForm defaultVersion={version} defaultRegion="eu" />
+      <AddCharacterForm defaultVersion={version} defaultRegion={defaultRegion()} />
 
       {!hasCharacters && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-8 text-center text-[var(--muted)]">

@@ -8,16 +8,11 @@ const prisma = new PrismaClient();
 
 async function main() {
   for (const task of taskCatalog) {
+    // Create-only (empty update): hand edits to labels/order/active in the DB
+    // must survive the migrate job that runs on every docker compose up.
     await prisma.taskCatalog.upsert({
       where: { gameVersion_taskKey: { gameVersion: task.gameVersion, taskKey: task.taskKey } },
-      update: {
-        label: task.label,
-        category: task.category,
-        scope: task.scope,
-        source: task.source,
-        sortOrder: task.sortOrder,
-        active: task.active,
-      },
+      update: {},
       create: task,
     });
   }

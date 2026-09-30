@@ -62,8 +62,10 @@ npm run lint       # eslint (flat config, next/core-web-vitals)
 - **worker** (`worker/index.ts`) — ticks every 10 min: rollover sweep (a
   region's weekId changed → refresh all its characters; a region's weekId is
   only recorded when its refresh ran clean, so failed regions retry next
-  tick) + daily sweep (`lastFetchedAt` older than 24 h; transient fetch errors
-  leave `lastFetchedAt` untouched and are retried, permanent 404s are not).
+  tick) + daily sweep (`lastFetchedAt` older than 24 h; transient failures
+  wait out an exponential backoff (10 min doubling, capped at 24 h) before
+  retrying, permanent 404s advance `lastFetchedAt` so they are never retried
+  at tick cadence).
   Logged to `job_runs`, pruned after 30 days.
 
 ## Merge precedence
@@ -71,7 +73,9 @@ npm run lint       # eslint (flat config, next/core-web-vitals)
 manual completion row > derived state > unknown. Manual rows are user
 overrides on **any** catalog task — auto-derived rows too (e.g. to resolve an
 `unknown` or correct a wrong ✓). Toggle on → upsert row; toggle off → delete
-row (state falls back to derived).
+row (state falls back to derived). Clearing a derived-done ✓ has no row to
+delete, so it persists an explicit not-done row instead and the correction
+survives reload.
 
 ## Known limitations (by design)
 
@@ -80,7 +84,8 @@ row (state falls back to derived).
 - **Equipment** is stored in snapshots from day one but not displayed on the
   MVP board.
 - **No auth** — anyone who can reach the URL can view/edit. Localhost-only
-  contract: Docker Compose binds web (:3000) and postgres (:5432) to
+  contract: Docker Compose binds web (:3000), postgres (:5432) and the
+  optional Redis profile (:6379) to
   `127.0.0.1` only. Do not expose publicly without adding an auth layer
   (future migration: users/oauth_tokens tables + session layer).
 - **M+ `best_runs`** is known to come back empty from the API — vault slots
@@ -96,6 +101,12 @@ row (state falls back to derived).
 
 Secrets live only in `.env` (`BLIZZARD_CLIENT_ID/SECRET`, `DATABASE_URL`),
 shared by web and worker. All Blizzard calls are server-side.
+
+Mutating API routes reject cross-origin requests (an Origin/Host check that
+still passes curl and same-origin usage), so a drive-by page cannot relay
+POSTs through the user's browser into loopback. Docker Compose binds web
+(:3000), postgres (:5432) and the optional Redis profile (:6379,
+password-protected via `REDIS_PASSWORD`) to `127.0.0.1` only.
 
 ## Disk hygiene
 
