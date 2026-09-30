@@ -64,8 +64,10 @@ export async function POST(req: NextRequest) {
   try {
     await toggleTaskCompletion(characterId, taskKey, weekId, body.on !== false);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'toggle failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Short fixed label in the body, detail to the server log: the raw
+    // message (often Prisma internals) renders verbatim under the task row.
+    console.error('[task-completions] toggle failed:', err);
+    return NextResponse.json({ error: 'toggle failed' }, { status: 500 });
   }
   return NextResponse.json({ ok: true, taskKey, weekId, on: body.on !== false });
 }

@@ -31,9 +31,8 @@ export async function GET(req: NextRequest) {
     const realms = await fetchRealms(version as 'retail' | 'classic1x', region as 'us' | 'eu' | 'kr' | 'tw');
     return NextResponse.json({ realms });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'realm fetch failed' },
-      { status: 502 },
-    );
+    // Short fixed label in the body, detail to the server log.
+    console.error('[realms] realm fetch failed:', err);
+    return NextResponse.json({ error: 'realm fetch failed' }, { status: 502 });
   }
 }

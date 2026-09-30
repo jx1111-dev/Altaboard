@@ -44,8 +44,22 @@ export class ServerError extends BlizzardError {
   }
 }
 
-// Compact one-line label for logs / snapshot _endpointErrors.
+// Compact one-line label for logs / snapshot _endpointErrors. For
+// BlizzardErrors the URL origin is stripped: these strings persist into
+// snapshots and render as lastFetchError, where the host adds nothing but
+// noise (status + endpoint path is the useful part).
 export function describeError(err: unknown): string {
-  if (err instanceof BlizzardError) return `${err.status}: ${err.endpoint ?? ''}`.trim();
+  if (err instanceof BlizzardError) {
+    return `${err.status}: ${stripOrigin(err.endpoint ?? '')}`.trim();
+  }
   return err instanceof Error ? err.message : String(err);
+}
+
+function stripOrigin(url: string): string {
+  if (!url) return '';
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url; // already a path or a plain label, keep it
+  }
 }
