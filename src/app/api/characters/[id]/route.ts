@@ -1,3 +1,6 @@
+// Per-character settings mutations: priority, group label, archive flag and
+// delete. The catches below make only a genuine record-not-found a 404.
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isNotFoundViolation } from '@/server/prisma';
 import { isSameOrigin, parseJsonBody, routeError } from '@/lib/http';
@@ -6,6 +9,9 @@ export const dynamic = 'force-dynamic';
 
 const PRIORITY_MIN = 0;
 const PRIORITY_MAX = 1000;
+// Group labels render as chips on board cards and settings rows; the cap keeps
+// one long input from breaking those layouts.
+const GROUP_NAME_MAX_LENGTH = 64;
 
 type PatchBody = {
   priority?: number;
@@ -32,7 +38,10 @@ export async function PATCH(
     data.priority = Math.min(PRIORITY_MAX, Math.max(PRIORITY_MIN, Math.round(body.priority)));
   }
   if (body.groupName !== undefined) {
-    data.groupName = body.groupName === null || body.groupName === '' ? null : String(body.groupName);
+    data.groupName =
+      body.groupName === null || body.groupName === ''
+        ? null
+        : String(body.groupName).slice(0, GROUP_NAME_MAX_LENGTH);
   }
   if (typeof body.archived === 'boolean') data.archived = body.archived;
 

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { taskCatalog, demoClassicCharacters } from './seeds';
 import { mockAdapter } from '@/lib/adapters/mock';
-import { currentWeekId } from '@/lib/week';
+import { persistCharacterSnapshot } from '@/lib/board';
 import type { GameVersion, Region } from '@/lib/blizzard/client';
 
 const prisma = new PrismaClient();
@@ -50,42 +50,9 @@ async function main() {
         realmSlug: demo.realmSlug,
         nameLower,
       });
-      const now = new Date();
-      const weekId = currentWeekId(demo.region, now);
-
-      await prisma.$transaction([
-        prisma.character.update({
-          where: { id: character.id },
-          data: {
-            name: data.summary.name,
-            characterClass: data.summary.characterClass,
-            spec: data.summary.spec,
-            level: data.summary.level,
-            guildName: data.summary.guildName,
-            lastFetchedAt: now,
-            lastFetchError: null,
-          },
-        }),
-        prisma.characterSnapshot.upsert({
-          where: { characterId_weekId: { characterId: character.id, weekId } },
-          update: {
-            capturedAt: now,
-            payload: data.payload as object,
-            ilvl: data.summary.ilvl,
-            mplusRating: data.summary.mplusRating,
-            achievementPoints: data.summary.achievementPoints,
-          },
-          create: {
-            characterId: character.id,
-            weekId,
-            capturedAt: now,
-            payload: data.payload as object,
-            ilvl: data.summary.ilvl,
-            mplusRating: data.summary.mplusRating,
-            achievementPoints: data.summary.achievementPoints,
-          },
-        }),
-      ]);
+      // The shared persist path also resets lastFetchError / fetchFailures /
+      // nextAttemptAt - harmless for seed rows, which carry no fetch history.
+      await persistCharacterSnapshot(character.id, data, new Date());
       demoCharacters++;
     }
   }

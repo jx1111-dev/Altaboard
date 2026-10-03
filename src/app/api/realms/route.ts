@@ -1,22 +1,19 @@
+// Realm autocomplete for the add-character form; in mock mode a fixed list is
+// served instead of hitting Blizzard's realm index.
+
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchRealms } from '@/lib/blizzard/realms';
 import { MOCK_BLIZZARD } from '@/lib/adapters';
+import { MOCK_REALMS } from '@/lib/adapters/mock';
+import { GAME_VERSIONS, REGIONS } from '@/lib/board';
 
 export const dynamic = 'force-dynamic';
-
-const VERSIONS = new Set(['retail', 'classic1x']);
-const REGIONS = new Set(['us', 'eu', 'kr', 'tw']);
-
-const MOCK_REALMS = [
-  'Argent Dawn', 'Antonidas', 'Blackmoore', 'Kazzak', 'Ravencrest',
-  'Tarren Mill', 'Thrall', 'Stormrage', 'Illidan', 'Hydraxis',
-].map((name) => ({ name, slug: name.toLowerCase().replace(/[^a-z]/g, '-') }));
 
 export async function GET(req: NextRequest) {
   const version = req.nextUrl.searchParams.get('version') ?? '';
   const region = (req.nextUrl.searchParams.get('region') ?? '').toLowerCase();
 
-  if (!VERSIONS.has(version) || !REGIONS.has(region)) {
+  if (!GAME_VERSIONS.some((v) => v.code === version) || !REGIONS.has(region)) {
     return NextResponse.json(
       { error: 'version must be retail|classic1x, region must be us|eu|kr|tw' },
       { status: 400 },

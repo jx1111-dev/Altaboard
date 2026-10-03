@@ -1,20 +1,14 @@
-import { prisma } from '@/server/prisma';
+// Settings page: priority/group management over the active roster plus the
+// archived section (restore or delete).
+
 import { defaultRegion } from '@/lib/board';
+import { getCharacterSettings } from '@/lib/settings';
 import CharacterSettingsTable from '@/components/CharacterSettingsTable';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
-  const [characters, archived] = await Promise.all([
-    prisma.character.findMany({
-      where: { archived: false },
-      orderBy: [{ priority: 'asc' }, { nameLower: 'asc' }],
-    }),
-    prisma.character.findMany({
-      where: { archived: true },
-      orderBy: { nameLower: 'asc' },
-    }),
-  ]);
+  const { characters, archived } = await getCharacterSettings();
 
   const toRow = (c: (typeof characters)[number]) => ({
     id: c.id,

@@ -8,15 +8,15 @@
 // Sweeps are rate-budgeted (shared token bucket); one bad character never
 // crashes the worker.
 
+import { pathToFileURL } from 'node:url';
 import { prisma } from '@/server/prisma';
 import { currentWeekId, DEFAULT_SCHEDULES } from '@/lib/week';
-import { refreshCharacter } from '@/lib/board';
+import { refreshCharacter, REGIONS } from '@/lib/board';
 import { purgeExpiredCache } from '@/lib/blizzard/cache';
 
 const TICK_INTERVAL_MS = 10 * 60 * 1000;
 const DAILY_STALENESS_MS = 24 * 60 * 60 * 1000;
 const JOB_RUN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-const REGIONS = ['us', 'eu', 'kr', 'tw'];
 
 async function main() {
   console.log('[worker] started - ticking every', TICK_INTERVAL_MS / 60000, 'min');
@@ -47,7 +47,9 @@ async function tick(): Promise<void> {
 // sweep, refresh all characters of changed regions. A region's weekId is only
 // recorded when its refresh ran with zero failures - failed regions keep the
 // old weekId and are picked up again next tick.
-async function rolloverSweep(now: Date): Promise<string[]> {
+// Exported for tests (tests/worker.test.ts pins the rollover seam); the
+// process itself only ever runs it from tick().
+export async function rolloverSweep(now: Date): Promise<string[]> {
   const lastSweep = await prisma.jobRun.findFirst({
     where: { type: 'rollover_sweep', status: { in: ['success', 'partial'] } },
     orderBy: { startedAt: 'desc' },
@@ -67,7 +69,8 @@ async function rolloverSweep(now: Date): Promise<string[]> {
     }
   }
 
-  const changed = REGIONS.filter(
+  // REGIONS is a Set (shared with the API routes); filter needs an array.
+  const changed = [...REGIONS].filter(
     (r) => currentWeekIds[r] !== undefined && currentWeekIds[r] !== lastWeekIds[r],
   );
 
@@ -176,7 +179,12 @@ async function pruneOldJobRuns(now: Date): Promise<number> {
   return res.count;
 }
 
-main().catch((err) => {
-  console.error('[worker] fatal:', err);
-  process.exit(1);
-});
+// Auto-run only when executed directly (`tsx worker/index.ts`): tests import
+// the sweep functions, and an import that starts timers would never let the
+// process exit.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch((err) => {
+    console.error('[worker] fatal:', err);
+    process.exit(1);
+  });
+}

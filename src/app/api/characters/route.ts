@@ -1,12 +1,14 @@
+// Add-character onboarding (POST): creates the row and runs the first fetch
+// synchronously so the card appears (or its fetch error does) immediately.
+// GET is the raw roster listing for admin tooling.
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isUniqueViolation } from '@/server/prisma';
-import { refreshCharacter } from '@/lib/board';
+import { refreshCharacter, GAME_VERSIONS, REGIONS } from '@/lib/board';
 import { isSameOrigin, parseJsonBody, routeError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
-const VERSIONS = new Set(['retail', 'classic1x']);
-const REGIONS = new Set(['us', 'eu', 'kr', 'tw']);
 // WoW names are letters only; realm slugs are lowercase letters/digits/hyphens.
 const NAME_RE = /^[a-zA-Z]+$/;
 const REALM_SLUG_RE = /^[a-z0-9-]+$/;
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
   if (!name || !realmSlug) {
     return NextResponse.json({ error: 'name and realmSlug are required' }, { status: 400 });
   }
-  if (!REGIONS.has(region) || !VERSIONS.has(gameVersion)) {
+  if (!REGIONS.has(region) || !GAME_VERSIONS.some((v) => v.code === gameVersion)) {
     return NextResponse.json(
       { error: 'region must be us|eu|kr|tw, gameVersion must be retail|classic1x' },
       { status: 400 },

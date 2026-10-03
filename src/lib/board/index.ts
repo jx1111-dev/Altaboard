@@ -1,6 +1,7 @@
 // Board service: read-time task state assembly + character refresh.
 // Server Components and API routes both call these functions directly.
 
+import { Prisma } from '@prisma/client';
 import { prisma, isUniqueViolation } from '@/server/prisma';
 import { currentWeekId } from '@/lib/week';
 import {
@@ -12,13 +13,16 @@ import {
 import { getAdapter } from '@/lib/adapters';
 import { describeError, NotFoundError } from '@/lib/blizzard/errors';
 import type { GameVersion, Region } from '@/lib/blizzard/client';
+import type { FetchedCharacterData } from '@/lib/adapters/types';
 
 export const GAME_VERSIONS: { code: GameVersion; label: string }[] = [
   { code: 'retail', label: 'Retail' },
   { code: 'classic1x', label: 'Classic' },
 ];
 
-const REGIONS = new Set(['us', 'eu', 'kr', 'tw']);
+// Canonical region allowlist; the API routes and the worker import it so a new
+// region only lands in one place. Set for O(1) membership in defaultRegion.
+export const REGIONS = new Set(['us', 'eu', 'kr', 'tw']);
 
 // DEFAULT_REGION from the environment (us|eu|kr|tw, eu fallback); .env.example
 // documents the knob. Read at render time in Server Components.
@@ -63,15 +67,30 @@ export type BoardCharacter = {
 };
 
 // Portraits live inside the snapshot payload's media section; dig them out
-// once here so the UI never reaches into payload internals.
+// once here so the UI never reaches into payload internals. page.tsx renders
+// the URL raw into <img src>, so only Blizzard's media hosts pass: https plus
+// a .blizzard.com / .worldofwarcraft.com hostname (the media render CDN) - a
+// poisoned payload must not turn into an <img> request to an arbitrary host.
+const PORTRAIT_HOST_SUFFIXES = ['.blizzard.com', '.worldofwarcraft.com'];
+
 function portraitFromPayload(payload: Record<string, unknown>): string | null {
   const assets = (payload.media as { assets?: { key?: string; value?: string }[] } | undefined)
     ?.assets;
-  return (
+  const portrait =
     assets?.find((a) => a.key === 'avatar')?.value ??
     assets?.find((a) => a.key === 'inset')?.value ??
-    null
-  );
+    null;
+  if (portrait === null) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(portrait);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== 'https:') return null;
+  return PORTRAIT_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix)) ? portrait : null;
 }
 
 export async function getBoard(version: GameVersion): Promise<{
@@ -119,61 +138,79 @@ export async function getBoard(version: GameVersion): Promise<{
     completionsByCharacter.set(row.characterId, rows);
   }
 
-  const board: BoardCharacter[] = await Promise.all(
-    characters.map(async (c) => {
-      const weekId = currentWeekId(c.region, now);
-      const completions = completionsByCharacter.get(c.id) ?? [];
-
-      const latest = c.snapshots[0] ?? null;
-      const derived = deriveTasks(
-        latest ? { weekId: latest.weekId, payload: latest.payload } : null,
-        catalogTasks,
-        weekId,
-        c.region,
-        now,
-      );
-      const merged = mergeTasks(derived, completions);
-
-      return {
-        id: c.id,
-        name: c.name,
-        characterClass: c.characterClass,
-        spec: c.spec,
-        level: c.level,
-        guildName: c.guildName,
-        region: c.region,
-        realmSlug: c.realmSlug,
-        groupName: c.groupName,
-        priority: c.priority,
-        weekId,
-        snapshot: latest
-          ? {
-              capturedAt: latest.capturedAt,
-              ilvl: latest.ilvl,
-              mplusRating: latest.mplusRating,
-              achievementPoints: latest.achievementPoints,
-              portraitUrl: portraitFromPayload(latest.payload as Record<string, unknown>),
-              payload: latest.payload as Record<string, unknown>,
-            }
-          : null,
-        tasks: merged.map(
-          ({ taskKey, label, category, scope, source, state, manuallySet }) => ({
-            taskKey,
-            label,
-            category,
-            scope,
-            source,
-            state,
-            manuallySet,
-          }),
-        ),
-        lastFetchedAt: c.lastFetchedAt,
-        lastFetchError: c.lastFetchError,
-      };
-    }),
+  const board: BoardCharacter[] = characters.map((c) =>
+    toBoardCharacter(
+      c,
+      completionsByCharacter.get(c.id) ?? [],
+      catalogTasks,
+      currentWeekId(c.region, now),
+      now,
+    ),
   );
 
   return { version, characters: board };
+}
+
+// Character row exactly as getBoard fetches it: the latest snapshot joined in.
+type CharacterWithLatestSnapshot = Prisma.CharacterGetPayload<{
+  include: { snapshots: { orderBy: { capturedAt: 'desc' }; take: 1 } };
+}>;
+
+// One board row's mapping, pulled out of getBoard so the query function stays
+// pure orchestration (fetch rows, group completions, delegate).
+function toBoardCharacter(
+  character: CharacterWithLatestSnapshot,
+  completions: { taskKey: string; done: boolean }[],
+  catalogTasks: CatalogTask[],
+  weekId: string,
+  now: Date,
+): BoardCharacter {
+  const latest = character.snapshots[0] ?? null;
+  const derived = deriveTasks(
+    latest ? { weekId: latest.weekId, payload: latest.payload } : null,
+    catalogTasks,
+    weekId,
+    character.region,
+    now,
+  );
+  const merged = mergeTasks(derived, completions);
+
+  return {
+    id: character.id,
+    name: character.name,
+    characterClass: character.characterClass,
+    spec: character.spec,
+    level: character.level,
+    guildName: character.guildName,
+    region: character.region,
+    realmSlug: character.realmSlug,
+    groupName: character.groupName,
+    priority: character.priority,
+    weekId,
+    snapshot: latest
+      ? {
+          capturedAt: latest.capturedAt,
+          ilvl: latest.ilvl,
+          mplusRating: latest.mplusRating,
+          achievementPoints: latest.achievementPoints,
+          portraitUrl: portraitFromPayload(latest.payload as Record<string, unknown>),
+          payload: latest.payload as Record<string, unknown>,
+        }
+      : null,
+    tasks: merged.map(
+      ({ taskKey, label, category, scope, source, state, manuallySet }) => ({
+        taskKey,
+        label,
+        category,
+        scope,
+        source,
+        state,
+        manuallySet,
+      }),
+    ),
+    lastFetchedAt: character.lastFetchedAt,
+    lastFetchError: character.lastFetchError,
+  };
 }
 
 // weekId can be null (one_time tasks) so the compound-unique selector can't
@@ -245,6 +282,63 @@ export type RefreshResult = {
 const BACKOFF_BASE_MS = 10 * 60 * 1000;
 const BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
 
+// Character summary update + this week's snapshot upsert in one transaction:
+// the card renders summary columns and snapshot payload together, so they must
+// not half-land on a crash between them. The reset of lastFetchError /
+// fetchFailures / nextAttemptAt also clears any backoff a previous failure
+// armed. weekId derives from the character's region (a character never
+// migrates regions), looked up here so callers pass no context that can drift
+// from the row.
+export async function persistCharacterSnapshot(
+  characterId: string,
+  data: FetchedCharacterData,
+  now: Date,
+): Promise<void> {
+  const character = await prisma.character.findUniqueOrThrow({
+    where: { id: characterId },
+    select: { region: true },
+  });
+  const weekId = currentWeekId(character.region, now);
+
+  await prisma.$transaction([
+    prisma.character.update({
+      where: { id: characterId },
+      data: {
+        name: data.summary.name,
+        characterClass: data.summary.characterClass,
+        spec: data.summary.spec,
+        level: data.summary.level,
+        guildName: data.summary.guildName,
+        lastFetchedAt: now,
+        lastFetchError: null,
+        fetchFailures: 0,
+        nextAttemptAt: null,
+      },
+    }),
+    prisma.characterSnapshot.upsert({
+      where: {
+        characterId_weekId: { characterId, weekId },
+      },
+      update: {
+        capturedAt: now,
+        payload: data.payload as object,
+        ilvl: data.summary.ilvl,
+        mplusRating: data.summary.mplusRating,
+        achievementPoints: data.summary.achievementPoints,
+      },
+      create: {
+        characterId,
+        weekId,
+        capturedAt: now,
+        payload: data.payload as object,
+        ilvl: data.summary.ilvl,
+        mplusRating: data.summary.mplusRating,
+        achievementPoints: data.summary.achievementPoints,
+      },
+    }),
+  ]);
+}
+
 // Fetch fresh data via the character's adapter and upsert the week's snapshot.
 // One bad character never throws into the caller's lap - errors are returned.
 export async function refreshCharacter(
@@ -264,44 +358,7 @@ export async function refreshCharacter(
       nameLower: character.nameLower,
     });
 
-    const weekId = currentWeekId(character.region, now);
-    await prisma.$transaction([
-      prisma.character.update({
-        where: { id: characterId },
-        data: {
-          name: data.summary.name,
-          characterClass: data.summary.characterClass,
-          spec: data.summary.spec,
-          level: data.summary.level,
-          guildName: data.summary.guildName,
-          lastFetchedAt: now,
-          lastFetchError: null,
-          fetchFailures: 0,
-          nextAttemptAt: null,
-        },
-      }),
-      prisma.characterSnapshot.upsert({
-        where: {
-          characterId_weekId: { characterId, weekId },
-        },
-        update: {
-          capturedAt: now,
-          payload: data.payload as object,
-          ilvl: data.summary.ilvl,
-          mplusRating: data.summary.mplusRating,
-          achievementPoints: data.summary.achievementPoints,
-        },
-        create: {
-          characterId,
-          weekId,
-          capturedAt: now,
-          payload: data.payload as object,
-          ilvl: data.summary.ilvl,
-          mplusRating: data.summary.mplusRating,
-          achievementPoints: data.summary.achievementPoints,
-        },
-      }),
-    ]);
+    await persistCharacterSnapshot(characterId, data, now);
     return { ok: true };
   } catch (err) {
     // describeError strips the upstream URL origin, so the persisted/rendered

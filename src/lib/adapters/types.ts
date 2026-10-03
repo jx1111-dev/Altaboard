@@ -13,6 +13,10 @@ export type CharacterRef = {
 
 export type FetchedCharacterData = {
   payload: Record<string, unknown>;
+  // No portraitUrl here: both adapters used to compute one, but the snapshot
+  // upsert never persisted it. The read path derives portraits from the
+  // payload instead (portraitFromPayload in lib/board), the single extraction
+  // point.
   summary: {
     name: string;
     characterClass: string | null;
@@ -22,7 +26,6 @@ export type FetchedCharacterData = {
     ilvl: number | null;
     mplusRating: number | null;
     achievementPoints: number | null;
-    portraitUrl: string | null;
   };
 };
 

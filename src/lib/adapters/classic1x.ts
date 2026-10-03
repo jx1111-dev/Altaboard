@@ -2,8 +2,7 @@
 // are exposed. Achievements/statistics and keystone data are not available,
 // so classic boards are mostly manual checks by design.
 
-import { blizzardGet } from '@/lib/blizzard/client';
-import { describeError, NotFoundError } from '@/lib/blizzard/errors';
+import { asNumber, fetchEndpoints, requireProfile } from './shared';
 import type {
   CharacterAdapter,
   CharacterRef,
@@ -22,10 +21,6 @@ type ClassicProfile = {
   race?: { name?: string };
 };
 
-type MediaPayload = {
-  assets?: { key?: string; value?: string }[];
-};
-
 function characterEndpoints(ref: CharacterRef): EndpointSpec[] {
   const base = `/profile/wow/character/${ref.realmSlug}/${ref.nameLower}`;
   return [
@@ -39,61 +34,24 @@ export const classic1xAdapter: CharacterAdapter = {
   version: 'classic1x',
 
   async fetchCharacter(ref: CharacterRef): Promise<FetchedCharacterData> {
-    const endpointErrors: Record<string, string> = {};
-    // The caught error instances, kept beside their describeError strings so a
-    // typed class (NotFoundError) can be rethrown across the adapter boundary.
-    const endpointFailures: Record<string, unknown> = {};
-    const payload: Record<string, unknown> = {};
-
-    await Promise.all(
-      characterEndpoints(ref).map(async (spec) => {
-        try {
-          payload[spec.payloadKey] = (await blizzardGet<Record<string, unknown>>(
-            spec.path,
-            {},
-            {
-              version: 'classic1x',
-              region: ref.region,
-              namespaceKind: spec.namespaceKind,
-              ttlClass: spec.ttlClass,
-            },
-          )) as Record<string, unknown>;
-        } catch (err) {
-          // Classic endpoints intermittently 403 (data unavailable); only the
-          // profile is load-bearing.
-          endpointErrors[spec.payloadKey] = describeError(err);
-          endpointFailures[spec.payloadKey] = err;
-        }
-      }),
-    );
-
-    const profile = payload.profile as ClassicProfile | undefined;
-    if (!profile) {
-      // A profile 404 is rethrown as-is so refreshCharacter can classify it as
-      // permanent instead of retrying the character at tick cadence forever.
-      if (endpointFailures.profile instanceof NotFoundError) throw endpointFailures.profile;
-      throw new Error(Object.values(endpointErrors)[0] ?? 'profile fetch failed');
-    }
-
-    payload._endpointErrors = endpointErrors;
-    payload._fetchedVersion = 'classic1x';
-
-    const media = payload.media as MediaPayload | undefined;
-    const portrait = media?.assets?.find((a) => a.key === 'avatar')?.value ?? null;
+    const fetched = await fetchEndpoints(ref, 'classic1x', characterEndpoints(ref));
+    const profile = requireProfile(
+      fetched.payload.profile,
+      fetched.endpointFailures,
+      fetched.endpointErrors,
+    ) as ClassicProfile;
 
     return {
-      payload,
+      payload: fetched.payload,
       summary: {
         name: profile.name ?? ref.nameLower,
         characterClass: profile.character_class?.name ?? null,
         spec: null,
-        level: profile.level ?? null,
+        level: asNumber(profile.level),
         guildName: profile.guild?.name ?? null,
-        ilvl: typeof profile.average_item_level === 'number' ? profile.average_item_level : null,
+        ilvl: asNumber(profile.average_item_level),
         mplusRating: null,
-        achievementPoints:
-          typeof profile.achievement_points === 'number' ? profile.achievement_points : null,
-        portraitUrl: portrait,
+        achievementPoints: asNumber(profile.achievement_points),
       },
     };
   },

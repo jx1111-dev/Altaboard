@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { responseErrorMessage } from '@/lib/fetchJson';
 
 type Row = {
   id: string;
@@ -33,8 +34,7 @@ export default function CharacterSettingsTable({ characters, archived = [] }: Pr
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? 'update failed');
+        throw new Error(await responseErrorMessage(res, 'update failed'));
       }
       router.refresh();
     } catch (err) {
@@ -52,8 +52,7 @@ export default function CharacterSettingsTable({ characters, archived = [] }: Pr
     try {
       const res = await fetch(`/api/characters/${id}`, { method: 'DELETE' });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? 'delete failed');
+        throw new Error(await responseErrorMessage(res, 'delete failed'));
       }
       router.refresh();
     } catch (err) {

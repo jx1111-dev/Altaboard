@@ -114,7 +114,6 @@ describe('fetchCharacter - success path', () => {
       ilvl: 410.5,
       mplusRating: 2500,
       achievementPoints: 31000,
-      portraitUrl: 'https://render.example/testchar-avatar.jpg',
     });
     expect(data.payload.profile).toBeDefined();
     expect(data.payload._endpointErrors).toEqual({});

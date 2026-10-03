@@ -2,12 +2,21 @@
 // UI without Blizzard API access. Deterministic per character name so cards
 // vary - some derive vault slots, some unknown.
 
+import { asNumber, asString, isRecord } from './shared';
 import { DEFAULT_SCHEDULES, currentWeekId, parseWeekId } from '@/lib/week';
 import type {
   CharacterAdapter,
   CharacterRef,
   FetchedCharacterData,
 } from './types';
+
+// The realms route serves this fixed list in mock mode: the mock has no
+// region-specific realm index, so one deterministic list answers every
+// version:region combo.
+export const MOCK_REALMS = [
+  'Argent Dawn', 'Antonidas', 'Blackmoore', 'Kazzak', 'Ravencrest',
+  'Tarren Mill', 'Thrall', 'Stormrage', 'Illidan', 'Hydraxis',
+].map((name) => ({ name, slug: name.toLowerCase().replace(/[^a-z]/g, '-') }));
 
 function hash(s: string): number {
   let h = 5381;
@@ -112,13 +121,21 @@ function classicPayload(ref: CharacterRef) {
   };
 }
 
+// { name?: string } sub-objects (character_class, active_spec, guild) read
+// through the shared guards instead of chained `as` casts.
+function namedObject(value: unknown): string | null {
+  return isRecord(value) ? asString(value.name) : null;
+}
+
 export const mockAdapter: CharacterAdapter = {
   version: 'retail', // registered for both versions; data branches on ref.gameVersion
 
   async fetchCharacter(ref: CharacterRef): Promise<FetchedCharacterData> {
     const payload =
       ref.gameVersion === 'classic1x' ? classicPayload(ref) : retailPayload(ref);
-    const profile = payload.profile as Record<string, unknown>;
+    // Same guards the real adapters read Blizzard payloads with: the mock must
+    // survive untrusted-shape reads, not lean on its own trusted literals.
+    const profile: Record<string, unknown> = isRecord(payload.profile) ? payload.profile : {};
 
     // Both versions emit plain strings now, so one read path serves both;
     // retail-only fields are simply absent from the classic payload.
@@ -126,17 +143,15 @@ export const mockAdapter: CharacterAdapter = {
       payload: payload as Record<string, unknown>,
       summary: {
         name: ref.nameLower.charAt(0).toUpperCase() + ref.nameLower.slice(1),
-        characterClass:
-          (profile.character_class as { name?: string } | undefined)?.name ?? null,
-        spec: (profile.active_spec as { name?: string } | undefined)?.name ?? null,
-        level: (profile.level as number) ?? null,
-        guildName: (profile.guild as { name?: string } | undefined)?.name ?? null,
-        ilvl: (profile.average_item_level as number | null) ?? null,
+        characterClass: namedObject(profile.character_class),
+        spec: namedObject(profile.active_spec),
+        level: asNumber(profile.level),
+        guildName: namedObject(profile.guild),
+        ilvl: asNumber(profile.average_item_level),
         mplusRating: ref.gameVersion === 'retail' && 'mythicKeystoneProfile' in payload
           ? 1500 + (hash(ref.nameLower) % 2500)
           : null,
-        achievementPoints: (profile.achievement_points as number) ?? null,
-        portraitUrl: null,
+        achievementPoints: asNumber(profile.achievement_points),
       },
     };
   },
