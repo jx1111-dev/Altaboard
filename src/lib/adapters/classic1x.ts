@@ -13,12 +13,13 @@ import type {
 
 type ClassicProfile = {
   name?: string;
-  character_class?: { name?: { en_US?: string } };
+  // With locale=en_US Blizzard returns plain strings, not localized objects.
+  character_class?: { name?: string };
   level?: number;
-  guild?: { name?: { en_US?: string } };
+  guild?: { name?: string };
   average_item_level?: number;
   achievement_points?: number;
-  race?: { name?: { en_US?: string } };
+  race?: { name?: string };
 };
 
 type MediaPayload = {
@@ -84,10 +85,10 @@ export const classic1xAdapter: CharacterAdapter = {
       payload,
       summary: {
         name: profile.name ?? ref.nameLower,
-        characterClass: profile.character_class?.name?.en_US ?? null,
+        characterClass: profile.character_class?.name ?? null,
         spec: null,
         level: profile.level ?? null,
-        guildName: profile.guild?.name?.en_US ?? null,
+        guildName: profile.guild?.name ?? null,
         ilvl: typeof profile.average_item_level === 'number' ? profile.average_item_level : null,
         mplusRating: null,
         achievementPoints:

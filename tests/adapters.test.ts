@@ -121,6 +121,23 @@ describe('fetchCharacter - success path', () => {
     expect(data.payload._fetchedVersion).toBe('retail');
   });
 
+  it('sends locale=en_US and the namespace on every Blizzard read (locale regression)', async () => {
+    stubResponses({ [PROFILE_PATH]: { name: 'Testchar' } });
+    await retailAdapter.fetchCharacter(ref);
+
+    const apiUrls = fetchMock.mock.calls
+      .map((call) => String(call[0]))
+      .filter((url) => !url.startsWith(TOKEN_URL));
+    expect(apiUrls.length).toBeGreaterThan(0);
+    for (const url of apiUrls) {
+      const params = new URL(url).searchParams;
+      // 'en-us' is rejected and flips name fields into localized
+      // { en_US: ... } objects - the exact bug this pins.
+      expect(params.get('locale')).toBe('en_US');
+      expect(params.get('namespace')).toBe('profile-us');
+    }
+  });
+
   it('a non-profile endpoint failing is recorded, the fetch still succeeds', async () => {
     stubResponses(
       { [PROFILE_PATH]: { name: 'Testchar' } },

@@ -72,7 +72,9 @@ export async function blizzardGet<T = unknown>(
   const query = new URLSearchParams(params);
   if (namespaceKind) {
     query.set('namespace', namespace(version, namespaceKind, region));
-    query.set('locale', 'en-us');
+    // Must be en_US (underscore): an invalid locale makes Blizzard return
+    // localized name objects ({ en_US: ... }) instead of plain strings.
+    query.set('locale', 'en_US');
   }
 
   return fetchWithAuth<T>(`${apiHost(region)}${endpoint}`, query, key, options, 0);

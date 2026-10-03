@@ -3,7 +3,7 @@ import Link from 'next/link';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Altaboard — WoW Alt Manager',
+  title: 'Altaboard - WoW Alt Manager',
   description: 'Weekly reset dashboard for all WoW characters',
 };
 

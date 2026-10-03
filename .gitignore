@@ -10,7 +10,7 @@ next-env.d.ts
 build/
 dist/
 
-# Environment - secrets never committed
+# Local env files
 .env
 .env.local
 .env*.local

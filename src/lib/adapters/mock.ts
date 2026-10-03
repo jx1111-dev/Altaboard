@@ -93,14 +93,16 @@ function retailPayload(ref: CharacterRef) {
   };
 }
 
+// Classic mirrors the real contract the en_US locale fix established: plain
+// strings, no localized { en_US: ... } objects.
 function classicPayload(ref: CharacterRef) {
   const h = hash(ref.nameLower + ref.realmSlug);
   return {
     profile: {
       name: ref.nameLower,
-      character_class: { name: { en_US: CLASSES[h % 9] } },
+      character_class: { name: CLASSES[h % 9] },
       level: 60,
-      guild: h % 3 === 0 ? { name: { en_US: 'Immortal' } } : undefined,
+      guild: h % 3 === 0 ? { name: 'Immortal' } : undefined,
       average_item_level: null,
       achievement_points: 4_000 + (h % 1_000),
     },
@@ -118,29 +120,18 @@ export const mockAdapter: CharacterAdapter = {
       ref.gameVersion === 'classic1x' ? classicPayload(ref) : retailPayload(ref);
     const profile = payload.profile as Record<string, unknown>;
 
-    const characterClass =
-      ref.gameVersion === 'classic1x'
-        ? ((profile.character_class as { name?: { en_US?: string } })?.name?.en_US ?? null)
-        : ((profile.character_class as { name?: string })?.name ?? null);
-
+    // Both versions emit plain strings now, so one read path serves both;
+    // retail-only fields are simply absent from the classic payload.
     return {
       payload: payload as Record<string, unknown>,
       summary: {
         name: ref.nameLower.charAt(0).toUpperCase() + ref.nameLower.slice(1),
-        characterClass,
-        spec:
-          ref.gameVersion === 'retail'
-            ? ((profile.active_spec as { name?: string } | undefined)?.name ?? null)
-            : null,
+        characterClass:
+          (profile.character_class as { name?: string } | undefined)?.name ?? null,
+        spec: (profile.active_spec as { name?: string } | undefined)?.name ?? null,
         level: (profile.level as number) ?? null,
-        guildName:
-          (profile.guild as { name?: unknown } | undefined)?.name instanceof Object
-            ? ((profile.guild as { name: { en_US?: string } }).name.en_US ?? null)
-            : ((profile.guild as { name?: string } | undefined)?.name ?? null),
-        ilvl:
-          ref.gameVersion === 'retail'
-            ? ((profile.average_item_level as number) ?? null)
-            : null,
+        guildName: (profile.guild as { name?: string } | undefined)?.name ?? null,
+        ilvl: (profile.average_item_level as number | null) ?? null,
         mplusRating: ref.gameVersion === 'retail' && 'mythicKeystoneProfile' in payload
           ? 1500 + (hash(ref.nameLower) % 2500)
           : null,
