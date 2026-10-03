@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isUniqueViolation } from '@/server/prisma';
 import { refreshCharacter } from '@/lib/board';
-import { isSameOrigin } from '@/lib/http';
+import { isSameOrigin, parseJsonBody, routeError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,10 +24,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
   }
 
-  let body: AddBody;
-  try {
-    body = (await req.json()) as AddBody;
-  } catch {
+  const body = (await parseJsonBody(req)) as AddBody | null;
+  if (!body) {
     return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
   }
 
@@ -73,7 +71,7 @@ export async function POST(req: NextRequest) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: 'character already on the board' }, { status: 409 });
     }
-    throw err;
+    return routeError(err, 'character create failed');
   }
 
   // First fetch is synchronous so the user immediately sees the card (or the

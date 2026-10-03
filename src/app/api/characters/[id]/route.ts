@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isNotFoundViolation } from '@/server/prisma';
-import { isSameOrigin } from '@/lib/http';
+import { isSameOrigin, parseJsonBody, routeError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +21,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
   }
   const { id } = await params;
-  let body: PatchBody;
-  try {
-    body = (await req.json()) as PatchBody;
-  } catch {
+  const body = (await parseJsonBody(req)) as PatchBody | null;
+  if (!body) {
     return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
   }
 
@@ -51,7 +49,7 @@ export async function PATCH(
     if (isNotFoundViolation(err)) {
       return NextResponse.json({ error: 'character not found' }, { status: 404 });
     }
-    throw err;
+    return routeError(err, 'character update failed');
   }
 }
 
@@ -71,6 +69,6 @@ export async function DELETE(
     if (isNotFoundViolation(err)) {
       return NextResponse.json({ error: 'character not found' }, { status: 404 });
     }
-    throw err;
+    return routeError(err, 'character delete failed');
   }
 }

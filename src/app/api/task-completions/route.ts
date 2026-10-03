@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/server/prisma';
 import { toggleTaskCompletion } from '@/lib/board';
 import { DEFAULT_SCHEDULES, currentWeekId } from '@/lib/week';
-import { isSameOrigin } from '@/lib/http';
+import { isSameOrigin, parseJsonBody, routeError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +21,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'cross-origin request rejected' }, { status: 403 });
   }
 
-  let body: ToggleBody;
-  try {
-    body = (await req.json()) as ToggleBody;
-  } catch {
+  const body = (await parseJsonBody(req)) as ToggleBody | null;
+  if (!body) {
     return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
   }
 
@@ -58,8 +56,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     // Short fixed label in the body, detail to the server log: the raw
     // message (often Prisma internals) renders verbatim under the task row.
-    console.error('[task-completions] toggle failed:', err);
-    return NextResponse.json({ error: 'toggle failed' }, { status: 500 });
+    return routeError(err, 'toggle failed');
   }
   return NextResponse.json({ ok: true, taskKey, weekId, on: body.on !== false });
 }

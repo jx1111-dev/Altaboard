@@ -10,7 +10,7 @@ import {
   type TaskState,
 } from '@/lib/tasks';
 import { getAdapter } from '@/lib/adapters';
-import { NotFoundError } from '@/lib/blizzard/errors';
+import { describeError, NotFoundError } from '@/lib/blizzard/errors';
 import type { GameVersion, Region } from '@/lib/blizzard/client';
 
 export const GAME_VERSIONS: { code: GameVersion; label: string }[] = [
@@ -304,29 +304,38 @@ export async function refreshCharacter(
     ]);
     return { ok: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    // describeError strips the upstream URL origin, so the persisted/rendered
+    // message (and the refresh route's 502 body) carries the sanitized
+    // status+path label instead of raw internals.
+    const message = describeError(err);
     // NotFound is permanent (character deleted or renamed away) - advancing
     // lastFetchedAt keeps the daily sweep from retrying a lost cause. Any
     // transient failure (rate limit, 5xx, network) leaves lastFetchedAt
     // untouched and backs the next attempt off exponentially instead of
     // retrying on every tick.
     const permanent = err instanceof NotFoundError;
-    if (permanent) {
-      await prisma.character.update({
-        where: { id: characterId },
-        data: { lastFetchError: message, lastFetchedAt: now },
-      });
-    } else {
-      const fetchFailures = character.fetchFailures + 1;
-      const backoffMs = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** fetchFailures);
-      await prisma.character.update({
-        where: { id: characterId },
-        data: {
-          lastFetchError: message,
-          fetchFailures,
-          nextAttemptAt: new Date(now.getTime() + backoffMs),
-        },
-      });
+    try {
+      if (permanent) {
+        await prisma.character.update({
+          where: { id: characterId },
+          data: { lastFetchError: message, lastFetchedAt: now },
+        });
+      } else {
+        const fetchFailures = character.fetchFailures + 1;
+        const backoffMs = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** fetchFailures);
+        await prisma.character.update({
+          where: { id: characterId },
+          data: {
+            lastFetchError: message,
+            fetchFailures,
+            nextAttemptAt: new Date(now.getTime() + backoffMs),
+          },
+        });
+      }
+    } catch (recordErr) {
+      // A DB failure while recording the fetch error must not escape raw and
+      // mask the original error the caller needs to classify.
+      console.error(`[board] failed to record fetch error for ${characterId}:`, recordErr);
     }
     return { ok: false, error: message };
   }

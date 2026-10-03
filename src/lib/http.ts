@@ -6,6 +6,8 @@
 // defense in depth. No Origin header (curl, scripts, healthchecks) passes,
 // and same-origin usage is unaffected.
 
+import { NextResponse } from 'next/server';
+
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export function isSameOrigin(req: Request): boolean {
@@ -28,4 +30,21 @@ export function isSameOrigin(req: Request): boolean {
     // Malformed or "null" Origin (e.g. sandboxed frames) - reject.
     return false;
   }
+}
+
+// Parse a JSON request body without throwing: handlers turn null into their
+// 400 instead of repeating the identical try/catch in every route.
+export async function parseJsonBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
+
+// Uniform unexpected-error exit: the fixed label goes in the body (bodies
+// render verbatim in UI badges), the real error goes to the server log.
+export function routeError(err: unknown, label: string): NextResponse {
+  console.error(`[route-error] ${label}:`, err);
+  return NextResponse.json({ error: label }, { status: 500 });
 }

@@ -60,8 +60,10 @@ async function rolloverSweep(now: Date): Promise<string[]> {
   for (const region of REGIONS) {
     try {
       currentWeekIds[region] = currentWeekId(region, now, DEFAULT_SCHEDULES);
-    } catch {
-      // region not in schedule - skip
+    } catch (err) {
+      // Region not in the schedule - skip it, but say so: silence here would
+      // read as a dead region on the board.
+      console.warn(`[worker] rollover skipping region ${region}:`, err);
     }
   }
 
@@ -74,6 +76,7 @@ async function rolloverSweep(now: Date): Promise<string[]> {
   });
 
   const recordedWeekIds: Record<string, string> = { ...lastWeekIds };
+  const failedIdsByRegion: Record<string, string[]> = {};
   let status = 'success';
   if (changed.length > 0) {
     const chars = await prisma.character.findMany({
@@ -85,11 +88,12 @@ async function rolloverSweep(now: Date): Promise<string[]> {
       idsByRegion.set(c.region, [...(idsByRegion.get(c.region) ?? []), c.id]);
     }
     for (const region of changed) {
-      const failures = await refreshByIds(idsByRegion.get(region) ?? [], now);
-      if (failures === 0) {
+      const failedIds = await refreshByIds(idsByRegion.get(region) ?? [], now);
+      if (failedIds.length === 0) {
         recordedWeekIds[region] = currentWeekIds[region];
       } else {
         status = 'partial';
+        failedIdsByRegion[region] = failedIds;
       }
     }
   }
@@ -102,6 +106,7 @@ async function rolloverSweep(now: Date): Promise<string[]> {
       detail: {
         weekIds: recordedWeekIds,
         rolledRegions: changed,
+        failedIdsByRegion,
       },
     },
   });
@@ -130,7 +135,7 @@ async function dailySweep(now: Date): Promise<void> {
     select: { id: true },
   });
 
-  const failures = await refreshByIds(
+  const failedIds = await refreshByIds(
     stale.map((c) => c.id),
     now,
   );
@@ -138,23 +143,28 @@ async function dailySweep(now: Date): Promise<void> {
   await prisma.jobRun.update({
     where: { id: job.id },
     data: {
-      status: failures === 0 ? 'success' : 'partial',
+      status: failedIds.length === 0 ? 'success' : 'partial',
       finishedAt: new Date(),
-      detail: { candidates: stale.length, failures },
+      detail: { candidates: stale.length, failures: failedIds.length, failedIds },
     },
   });
 }
 
-async function refreshByIds(ids: string[], now: Date): Promise<number> {
-  let failures = 0;
+// job_runs detail carries the failing ids so a partial sweep is actionable
+// from the record alone; the cap keeps a pathological all-failed sweep from
+// turning the detail blob into a log dump.
+const FAILED_IDS_DETAIL_CAP = 20;
+
+async function refreshByIds(ids: string[], now: Date): Promise<string[]> {
+  const failedIds: string[] = [];
   for (const id of ids) {
     const result = await refreshCharacter(id, { now });
     if (!result.ok) {
-      failures += 1;
+      if (failedIds.length < FAILED_IDS_DETAIL_CAP) failedIds.push(id);
       console.warn(`[worker] refresh failed for ${id}: ${result.error}`);
     }
   }
-  return failures;
+  return failedIds;
 }
 
 // job_runs is append-per-tick and only ever queried for the latest row per
