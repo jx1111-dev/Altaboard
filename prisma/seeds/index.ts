@@ -21,6 +21,9 @@ type SeedTask = {
 };
 
 const retailTasks: SeedTask[] = [
+  // Two adjacent vocabularies, deliberately distinct: taskKey ('vault_mplus_N')
+  // names the user-facing catalog row, while the derivation key inside source
+  // ('auto:mplus_runs_N') names the engine rule in lib/tasks that derives it.
   // Great Vault M+ slots, derived from mythic-keystone-profile runs.
   {
     gameVersion: 'retail',

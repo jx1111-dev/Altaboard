@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { responseErrorMessage } from '@/lib/fetchJson';
 
 type Props = {
   defaultVersion: string;
@@ -14,35 +15,35 @@ export default function AddCharacterForm({ defaultVersion, defaultRegion }: Prop
   const [region, setRegion] = useState(defaultRegion);
   const [name, setName] = useState('');
   const [realmSlug, setRealmSlug] = useState('');
-  // Realms are stored with the version:region key they were fetched for;
-  // "loading" is derived (current selection has no result yet).
-  const [realmsBy, setRealmsBy] = useState<{ key: string; realms: Realm[] } | null>(null);
+  // Single-entry cache of the realm list, keyed by the version:region it was
+  // fetched for; "loading" is derived (current selection has no cache hit).
+  const [realmCache, setRealmCache] = useState<{ key: string; realms: Realm[] } | null>(null);
   const [realmQuery, setRealmQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const realmsKey = `${version}:${region}`;
-  const realms = realmsBy?.key === realmsKey ? realmsBy.realms : [];
-  const loadingRealms = realmsBy?.key !== realmsKey;
+  const realms = realmCache?.key === realmsKey ? realmCache.realms : [];
+  const loadingRealms = realmCache?.key !== realmsKey;
 
   // Load realm list for autocomplete whenever version/region changes.
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/realms?version=${version}&region=${region}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'realm fetch failed');
+        if (!res.ok) throw new Error(await responseErrorMessage(res, 'realm fetch failed'));
         return res.json();
       })
       .then((data: { realms: Realm[] }) => {
         if (!cancelled) {
-          setRealmsBy({ key: realmsKey, realms: data.realms });
+          setRealmCache({ key: realmsKey, realms: data.realms });
           setError(null);
         }
       })
       .catch((err: Error) => {
         if (!cancelled) {
-          setRealmsBy({ key: realmsKey, realms: [] });
+          setRealmCache({ key: realmsKey, realms: [] });
           setError(`Could not load realms: ${err.message}`);
         }
       });
@@ -66,15 +67,18 @@ export default function AddCharacterForm({ defaultVersion, defaultRegion }: Prop
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, realmSlug, region, gameVersion: version }),
       });
-      // A proxy/HTML error page has no JSON body - never trust res.json().
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? 'add failed');
+        setError(await responseErrorMessage(res, 'add failed'));
       } else {
+        // A proxy/HTML error page has no JSON body - never trust res.json().
+        const data = (await res.json().catch(() => ({}))) as {
+          character?: { name?: string };
+          refresh?: { ok?: boolean; error?: string };
+        };
         setMessage(
           data.refresh?.ok
-            ? `${data.character.name} added and fetched.`
-            : `${data.character.name} added, but the first fetch failed: ${data.refresh?.error ?? 'unknown error'}`,
+            ? `${data.character?.name} added and fetched.`
+            : `${data.character?.name} added, but the first fetch failed: ${data.refresh?.error ?? 'unknown error'}`,
         );
         setName('');
         setRealmQuery('');

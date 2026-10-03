@@ -100,8 +100,8 @@ model ApiCache {
 
 model JobRun {
   id         String    @id @default(cuid())
-  type       String // 'rollover_sweep' | 'daily_sweep' | 'manual_refresh'
-  status     String // 'running' | 'success' | 'partial' | 'failed'
+  type       String // 'rollover_sweep' | 'daily_sweep'
+  status     String // 'running' | 'success' | 'partial'
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   detail     Json?

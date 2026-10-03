@@ -18,8 +18,8 @@ export const DEFAULT_SCHEDULES: ScheduleMap = {
 
 const WEEK_MS = 7 * 86_400_000;
 
-// Marks the date of the previous week's reset.
-// CandiDATE. Haha.
+// The most recent reset instant at or before `now`; its UTC calendar date is
+// the region's weekId.
 export function lastReset(now: Date, schedule: ResetSchedule): Date {
   const candidate = new Date(
     Date.UTC(

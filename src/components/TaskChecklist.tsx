@@ -2,10 +2,34 @@
 
 import { useState, useTransition } from 'react';
 import type { BoardTask } from '@/lib/board';
+import { responseErrorMessage } from '@/lib/fetchJson';
 
 type Props = {
   characterId: string;
   tasks: BoardTask[];
+};
+
+type VisualState = 'done' | 'not_done' | 'unknown' | 'manual_unset';
+
+// One entry per visual state; the 4-level className ternaries these replace
+// were unreadable at review distance.
+const STATE_STYLES: Record<VisualState, { box: string; label: string }> = {
+  done: {
+    box: 'border-[var(--done)] bg-[var(--done)]/20 text-[var(--done)]',
+    label: 'text-[var(--text)]',
+  },
+  not_done: {
+    box: 'border-[var(--not-done)] text-transparent',
+    label: 'text-[var(--muted)]',
+  },
+  unknown: {
+    box: 'border-[var(--unknown)] text-[var(--unknown)]',
+    label: 'text-[var(--unknown)]',
+  },
+  manual_unset: {
+    box: 'border-dashed border-[var(--not-done)] text-transparent',
+    label: 'text-[var(--muted)]',
+  },
 };
 
 // Task checklist on the character card. Legend:
@@ -36,31 +60,30 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
       return copy;
     });
 
-    startTransition(() => {
-      fetch('/api/task-completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characterId, taskKey: task.taskKey, on: nextOn }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            throw new Error((await res.json().catch(() => ({}))).error ?? 'toggle failed');
-          }
-        })
-        .catch((err: Error) => {
-          // Revert the optimistic flip and say why, silent reverts read as
-          // "the click did nothing".
-          setOverrides((prev) => {
-            const copy = { ...prev };
-            delete copy[task.taskKey];
-            return copy;
-          });
-          setErrors((prev) => ({ ...prev, [task.taskKey]: err.message }));
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/task-completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ characterId, taskKey: task.taskKey, on: nextOn }),
         });
+        if (!res.ok) {
+          throw new Error(await responseErrorMessage(res, 'toggle failed'));
+        }
+      } catch (err) {
+        // Revert the optimistic flip and say why, silent reverts read as
+        // "the click did nothing".
+        setOverrides((prev) => {
+          const copy = { ...prev };
+          delete copy[task.taskKey];
+          return copy;
+        });
+        setErrors((prev) => ({ ...prev, [task.taskKey]: (err as Error).message }));
+      }
     });
   }
 
-  function visualState(task: BoardTask): 'done' | 'not_done' | 'unknown' | 'manual_unset' {
+  function visualState(task: BoardTask): VisualState {
     if (task.taskKey in overrides) {
       return overrides[task.taskKey] ? 'done' : task.source === 'manual' ? 'manual_unset' : 'not_done';
     }
@@ -93,28 +116,12 @@ export default function TaskChecklist({ characterId, tasks }: Props) {
               <span
                 className={
                   'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border text-[10px] font-bold ' +
-                  (state === 'done'
-                    ? 'border-[var(--done)] bg-[var(--done)]/20 text-[var(--done)]'
-                    : state === 'unknown'
-                      ? 'border-[var(--unknown)] text-[var(--unknown)]'
-                      : state === 'manual_unset'
-                        ? 'border-dashed border-[var(--not-done)] text-transparent'
-                        : 'border-[var(--not-done)] text-transparent')
+                  STATE_STYLES[state].box
                 }
               >
                 {mark}
               </span>
-              <span
-                className={
-                  state === 'done'
-                    ? 'text-[var(--text)]'
-                    : state === 'unknown'
-                      ? 'text-[var(--unknown)]'
-                      : 'text-[var(--muted)]'
-                }
-              >
-                {task.label}
-              </span>
+              <span className={STATE_STYLES[state].label}>{task.label}</span>
             </button>
             {errors[task.taskKey] && (
               <p className="pl-7 text-xs text-[var(--error)]">{errors[task.taskKey]}</p>
