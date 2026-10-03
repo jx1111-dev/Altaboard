@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: altaboard
-      POSTGRES_PASSWORD: altaboard
-      POSTGRES_DB: altaboard
+      POSTGRES_USER: ${POSTGRES_USER:-altaboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-altaboard}
+      POSTGRES_DB: ${POSTGRES_DB:-altaboard}
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     # No-auth app: loopback only, see README "Known limitations".
     ports:
@@ -12,7 +12,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U altaboard -d altaboard"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-altaboard} -d ${POSTGRES_DB:-altaboard}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -22,7 +22,7 @@ services:
     build: .
     command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
     environment:
-      DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
+      DATABASE_URL: postgresql://${POSTGRES_USER:-altaboard}:${POSTGRES_PASSWORD:-altaboard}@db:5432/${POSTGRES_DB:-altaboard}
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
       BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
       MOCK_BLIZZARD: ${MOCK_BLIZZARD:-}
@@ -40,7 +40,7 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     environment:
-      DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
+      DATABASE_URL: postgresql://${POSTGRES_USER:-altaboard}:${POSTGRES_PASSWORD:-altaboard}@db:5432/${POSTGRES_DB:-altaboard}
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
       BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
       DEFAULT_REGION: ${DEFAULT_REGION:-eu}
@@ -62,7 +62,7 @@ services:
     # A crashed worker must come back on its own, it is the only refresher.
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://altaboard:altaboard@db:5432/altaboard
+      DATABASE_URL: postgresql://${POSTGRES_USER:-altaboard}:${POSTGRES_PASSWORD:-altaboard}@db:5432/${POSTGRES_DB:-altaboard}
       BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
       BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
       DEFAULT_REGION: ${DEFAULT_REGION:-eu}
@@ -72,6 +72,14 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # Sweeps log to job_runs on every tick (the first tick runs at boot), so
+    # this only passes once the loop actually touched the database.
+    healthcheck:
+      test: ["CMD-SHELL", "npx tsx scripts/worker-health.ts"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Optional: `docker compose --profile redis up`: Redis-backed cache upgrade path.
   redis:

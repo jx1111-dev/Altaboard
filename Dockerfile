@@ -31,8 +31,10 @@ COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/worker ./worker
+# scripts/worker-health.ts for the worker healthcheck
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
-# tsx for the worker; prisma CLI for migrate deploy
-RUN npm install -g tsx
+# Containers must not run as root; `node` ships with the node base image.
+USER node
 EXPOSE 3000
 CMD ["npm", "run", "start"]
