@@ -22,18 +22,24 @@ function bucket(): Bucket {
 // every concurrent caller owns a definite future token, so K sleepers wake
 // one refill apart instead of all firing together on the same refill.
 function delayForRequest(): number {
-  const b = bucket();
+  const bucketState = bucket();
   const now = Date.now();
-  const elapsed = (now - b.lastRefillMs) / 1000;
-  b.tokens = Math.min(BURST_CAPACITY, b.tokens + elapsed * REFILL_PER_SECOND);
-  b.lastRefillMs = now;
+  const elapsed = (now - bucketState.lastRefillMs) / 1000;
+  bucketState.tokens = Math.min(BURST_CAPACITY, bucketState.tokens + elapsed * REFILL_PER_SECOND);
+  bucketState.lastRefillMs = now;
 
-  b.tokens -= 1;
-  if (b.tokens >= 0) return 0;
-  return Math.ceil((-b.tokens / REFILL_PER_SECOND) * 1000);
+  bucketState.tokens -= 1;
+  if (bucketState.tokens >= 0) return 0;
+  return Math.ceil((-bucketState.tokens / REFILL_PER_SECOND) * 1000);
 }
 
 export async function acquireSlot(): Promise<void> {
   const delay = delayForRequest();
   if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+// Test seam: drop the bucket so the next acquire starts from a fresh full
+// burst, exactly like a new process. Only tests should call this.
+export function resetForTests(): void {
+  globalBucket.bucket = undefined;
 }

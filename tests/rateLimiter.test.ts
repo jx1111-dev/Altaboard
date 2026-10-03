@@ -3,22 +3,16 @@
 // together on the same refill as the pre-fix read-modify-write did.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { acquireSlot } from '@/lib/blizzard/rateLimiter';
-
-// The bucket is per-process module state on globalThis; reset it so each test
-// starts from a full burst.
-function resetBucket(): void {
-  (globalThis as unknown as { bucket?: unknown }).bucket = undefined;
-}
+import { acquireSlot, resetForTests } from '@/lib/blizzard/rateLimiter';
 
 beforeEach(() => {
   vi.useFakeTimers();
-  resetBucket();
+  resetForTests();
 });
 
 afterEach(() => {
   vi.useRealTimers();
-  resetBucket();
+  resetForTests();
 });
 
 describe('acquireSlot under concurrency', () => {
