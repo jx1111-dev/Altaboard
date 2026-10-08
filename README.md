@@ -1,4 +1,4 @@
-# Altaboard — WoW Alt Manager
+# Altaboard, WoW Alt Manager
 
 A weekly-reset dashboard for all your WoW characters (Retail + Classic Era),
 built as a Next.js fullstack app with PostgreSQL, running via Docker Compose.
