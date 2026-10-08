@@ -70,28 +70,28 @@ only.
 
 ## Architecture
 
-- **Next.js App Router (TypeScript)** — pages are Server Components that call
+- **Next.js App Router (TypeScript)**, pages are Server Components that call
   lib functions directly; `/api/*` route handlers handle mutations and
   client-side fetches.
-- **`lib/blizzard`** — client-credentials OAuth (machine token, no user login),
+- **`lib/blizzard`**, client-credentials OAuth (machine token, no user login),
   one cache (PostgreSQL `api_cache`, TTLs: profile 15 min / achievements 2 h /
   media+static 24 h) and a rate limiter: one module with two independent
-  per-process token buckets, one in the web process and one in the worker —
+  per-process token buckets, one in the web process and one in the worker,
   they do not share state. Redis upgrade path: replace the two functions in
   `cache.ts`.
-- **`lib/adapters`** — `retail` and `classic1x` behind one interface. Missing
+- **`lib/adapters`**, `retail` and `classic1x` behind one interface. Missing
   classic endpoints are omitted; the task engine degrades gracefully.
-- **`lib/week`** — reset engine, pure + vitest-tested. `weekId(region)` = UTC
+- **`lib/week`**, reset engine, pure + vitest-tested. `weekId(region)` = UTC
   date of the most recent reset (US Tue 15:00, EU Wed 07:00, KR/TW Thu 23:00
   UTC). `npx tsx scripts/verify-reset-times.ts` checks those constants
   against the live M+ period index per region (one-time run; needs Blizzard
   credentials and a reachable database); change the constants only on that
   evidence.
-- **`lib/tasks`** — `deriveTasks`, pure + vitest-tested. Read-time derivation;
+- **`lib/tasks`**, `deriveTasks`, pure + vitest-tested. Read-time derivation;
   only user toggles write `task_completions`. `unknown` is a first-class state:
-  ambiguous or missing API data is surfaced as "unknown — confirm manually",
+  ambiguous or missing API data is surfaced as "unknown, confirm manually",
   never a wrong ✓/✗.
-- **worker** (`worker/index.ts`) — ticks every 10 min: rollover sweep (a
+- **worker** (`worker/index.ts`), ticks every 10 min: rollover sweep (a
   region's weekId changed → refresh all its characters; a region's weekId is
   only recorded when its refresh ran clean, so failed regions retry next
   tick) + daily sweep (`lastFetchedAt` older than 24 h; transient failures
@@ -107,8 +107,8 @@ instants per region — pure functions, no I/O; `weekId(region)` is the UTC date
 of the most recent reset. `lib/tasks` is the pure derivation engine that turns
 snapshot payloads into task states, with `unknown` as a first-class state
 (ambiguous or missing API data is surfaced as unknown, never a wrong ✓/✗).
-`lib/board` is the service/read model shared by pages and routes — Server
-Components and API handlers both call it directly — doing read-time task state
+`lib/board` is the service/read model shared by pages and routes, Server
+Components and API handlers both call it directly, doing read-time task state
 assembly (derivation + merge precedence), character refresh with
 permanence/backoff handling, and history. The `src/app/api` route handlers are
 thin: same-origin check, body validation, then delegation to the board
@@ -119,7 +119,7 @@ is a keyed table with `expiresAt`; TTL is checked on read and the worker
 purges expired rows each tick, so the cache rides the database the app already
 runs and adds no new service to operate. For single-user load that is the
 whole job. The compose file still ships an optional, password-protected Redis
-profile as an upgrade path — swapping it in means replacing the two functions
+profile as an upgrade path, swapping it in means replacing the two functions
 in `cache.ts`.
 
 ## API surface
@@ -145,7 +145,7 @@ the detail in the server log (the same contract as POST `/api/characters` and
 ## Merge precedence
 
 manual completion row > derived state > unknown. Manual rows are user
-overrides on **any** catalog task — auto-derived rows too (e.g. to resolve an
+overrides on **any** catalog task, auto-derived rows too (e.g. to resolve an
 `unknown` or correct a wrong ✓). Toggle on → upsert row; toggle off → delete
 row (state falls back to derived). Clearing a derived-done ✓ has no row to
 delete, so it persists an explicit not-done row instead and the correction
@@ -157,15 +157,15 @@ survives reload.
   migrated.
 - **Equipment** is stored in snapshots from day one but not displayed on the
   MVP board.
-- **No auth** — anyone who can reach the URL can view/edit. Localhost-only
+- **No auth**, anyone who can reach the URL can view/edit. Localhost-only
   contract: Docker Compose binds web (:3000), postgres (:5432) and the
   optional Redis profile (:6379) to
   `127.0.0.1` only. Do not expose publicly without adding an auth layer
   (future migration: users/oauth_tokens tables + session layer).
-- **M+ `best_runs`** is known to come back empty from the API — vault slots
+- **M+ `best_runs`** is known to come back empty from the API, vault slots
   derive from `current_period.runs` instead; an empty runs list means a real
-  "not done", and a misaligned/uncoverable period — or a completed run with
-  no dungeon identity — means `unknown`.
+  "not done", and a misaligned/uncoverable period, or a completed run with
+  no dungeon identity, means `unknown`.
 - **KR/TW reset** lands Thursday 23:00 UTC, same value in the engine
   (`DEFAULT_SCHEDULES`) and the seed data, pinned by `tests/schedules.test.ts`.
 - **Raid/world vault rows** currently derive as `unknown` until verified
